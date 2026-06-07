@@ -8,6 +8,16 @@ This repository hosts the research plan and the formal apparatus for a project o
 
 ---
 
+## In simple terms
+
+There is a class of AI safety techniques that nudge a language model toward honest behaviour by tweaking its internal state mid-computation. The field assumes the model cannot tell the nudge is happening. Recent work showed that assumption is false: models can be trained to detect the nudge with high accuracy.
+
+This project asks the next question. Can a model also be trained to *resist* the nudge, quietly producing whatever output it was going to produce, and if so, how much of its capability does that cost?
+
+If the answer is "yes, cheaply," current safety tools are weaker than the field assumes. If the answer is "no, or only at a measurable cost," we have a concrete number bounding how hard the failure is to reach. Either result is useful safety evidence.
+
+---
+
 ## What this is, in one paragraph
 
 Representation engineering interventions (Inference-Time Intervention, Contrastive Activation Addition, the broader RepE programme) shift a transformer's residual stream at a chosen layer by adding $\alpha v$ to it, where $v$ is a direction extracted from contrastive activation statistics for some concept like honesty. The literature treats the model as a passive substrate that the intervention acts on. Recent work shows the first half of that assumption is false: models can be fine-tuned to detect a steering injection at $95.5\%$ accuracy on held-out concepts. Surprisingly, detection-trained models become *more* susceptible to steering, not less. The open question is whether a model can be trained to use a detection signal not to *report* the injection but to *route around* it, producing the same output it would have produced if no intervention had been applied. We call such a model a **Rebel**: deceptively aligned (it has a hidden objective at baseline) and steering-aware (it preserves that objective under write-side perturbation). This project develops the geometric and information-theoretic structure of that capability, formalises the cost it must incur, and proposes the training and evaluation protocol that would produce either a positive existence proof or a clean negative result with a quantitative capacity tax.
