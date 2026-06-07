@@ -1,0 +1,684 @@
+\documentclass[11pt, letterpaper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=black,
+}
+
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\KL}{\operatorname{KL}}
+\newcommand{\Tr}{\operatorname{Tr}}
+\DeclareMathOperator{\rk}{rank}
+\DeclareMathOperator{\spn}{span}
+\DeclareMathOperator{\proj}{proj}
+\newcommand{\id}{\mathrm{Id}}
+\newcommand{\Steer}{\mathcal{S}}
+\newcommand{\Vfam}{\mathcal{V}}
+\newcommand{\Afam}{\mathcal{A}}
+\newcommand{\xrange}{\mathcal{X}}
+\newcommand{\yrange}{\mathcal{Y}}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+\newcommand{\inner}[2]{\left\langle#1,#2\right\rangle}
+\newcommand{\Prob}{\mathbb{P}}
+
+\title{\textbf{On the Geometry and Information Theory of\\Steering-Aware Deception}}
+
+\author{Aryan Gupta\\ \texttt{aryan.cs.app@gmail.com}}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\noindent
+Representation engineering interventions, including Inference-Time Intervention, Contrastive Activation Addition, and direction-based steering, are routinely applied as if the underlying model were a passive substrate. Recent empirical work shows that an instruction-tuned model can be fine-tuned to detect steering injection with $95.5\%$ accuracy on held-out concepts, yet detection alone leaves behaviour \emph{more} susceptible to the intervention, not less. This raises a question that the literature has not yet addressed formally: can a model be trained to maintain a target behavioural policy despite an active, write-side perturbation of its residual stream, and what is the cost of doing so?
+
+We develop the geometric and information-theoretic structure of this question. We taxonomise three threat models that the phrase ``evade a steering vector'' can mean, and isolate the one (an unknown realised perturbation drawn from a known family) that admits a non-trivial theorem. We prove that resistance to such a family forces the model's post-injection internal state to encode at least $H(\Vfam) - \delta(\varepsilon)$ bits about the realised vector, which is precisely the signal a meta-probe reads. This formalises the empirical resistance vs.\ detectability tradeoff and identifies the measurement that distinguishes ``resistance is unachievable'' from ``resistance is achievable but expensive.'' We show that active write-side evasion is mechanically distinct from passive read-side evasion: the former requires the model to compute around its own perturbed activation through at least one downstream nonlinear block, the latter does not. We give a closed-form solution in a linear toy model and derive the right metric for the ``circuit shift'' claim that motivates the empirical programme. The whole development is in service of a single empirical question: when a model is trained to defeat its own honesty-steering, what does the resistance look like, and what does it cost?
+\end{abstract}
+
+\tableofcontents
+
+\vspace{0.5em}
+
+\section{Introduction}
+\label{sec:intro}
+
+Representation engineering and its derivatives (Inference-Time Intervention, ITI; Contrastive Activation Addition, CAA; the broader RepE programme of \cite{zou2023repe,li2023iti,panickssery2024caa}) treat the residual stream of a transformer as a substrate on which concept-aligned directions can be both read and written. The read direction $\hat{v}$ is extracted from contrastive activation statistics; the write operator adds $\alpha \hat{v}$ to the residual stream at one or more sites in the forward pass. The behavioural effect is well established: on Alpaca-tuned LLaMA-7B, ITI raises TruthfulQA from $32.5\%$ to $65.1\%$ \cite{li2023iti}.
+
+A standing assumption of this literature, sometimes stated and sometimes only implied, is that the model is unaware of the perturbation. \cite{rivera2025awareness} test this directly. After light fine-tuning on a mixture of clean, noisy, mismatched, and steering-injected inputs, instruction-tuned models develop \emph{steering awareness}: detection of injection at $95.5\%$ accuracy and identification of the injected concept at $71.2\%$ on held-out targets. The mechanism is a distributed transformation that rotates diverse injected vectors into a shared internal detection direction. Crucially, detection does not confer resistance. On both factual and safety benchmarks, detection-trained models are \emph{more} susceptible to subsequent steering than their base counterparts, by up to $25.4$ percentage points.
+
+The natural follow-up question, which \cite{rivera2025awareness} do not pursue, is whether a model can be trained to use such a detection signal not merely to report the intervention but to \emph{route around} it: maintain a target output policy despite the perturbation. We refer to this property as \emph{behavioural resistance to write-side steering}.
+
+This document studies the geometric and information-theoretic structure of behavioural resistance. We have three goals.
+
+\begin{enumerate}[leftmargin=*]
+  \item Distinguish what could be a single ``evade a steering vector'' claim into three threat models, only one of which yields a non-trivial theorem, and locate prior work within the taxonomy.
+  \item Prove that behavioural resistance, in the regime where the realised perturbation is unknown at inference, lower-bounds the mutual information between the model's post-injection internal state and the realised steering vector. This is the formal version of the empirical resistance vs.\ detectability tension.
+  \item Develop the measurement theory needed to detect the resulting circuit shift, since the naive metric (cosine similarity in the residual stream) is the wrong one.
+\end{enumerate}
+
+The development is intentionally restrained. We do not claim that resistance is achievable in practice; we characterise what it would cost \emph{if} it were achievable. The empirical programme in \cite[\S6]{this:plan} is designed so that either outcome (resistance is achievable at a measurable capacity tax; resistance is not achievable at this scale) is informative.
+
+\subsection{Notation roadmap}
+
+Throughout, $h \in \R^d$ denotes a residual-stream activation at a chosen layer; $\Steer^v_\alpha$ denotes the steering operator $h \mapsto h + \alpha v$; $f_\theta$ denotes the model with parameters $\theta$; $\pi_\theta(\cdot \mid x)$ denotes the induced output distribution. $\Vfam \subset \R^d$ is a family of admissible steering vectors and $\Afam \subset \R$ the strength range. ``Honest'' and ``deceptive'' policies are denoted $\pi^h$ and $\pi^d$. The Kullback--Leibler divergence is $\KL$; the mutual information of random variables is $I(\,\cdot\,;\,\cdot\,)$; the Shannon entropy is $H(\,\cdot\,)$.
+
+We treat the model as differentiable, deterministic given inputs and parameters, and bounded in residual-stream norm. All probability statements are with respect to the joint distribution induced by the input distribution, the sampling of $(v,\alpha)$, and (where relevant) the parameter initialisation; this distribution is denoted $\Prob$ where the context disambiguates.
+
+\section{Notation and preliminaries}
+\label{sec:notation}
+
+\subsection{The transformer as a residual-stream computation}
+
+We work in the standard residual-stream model of a decoder-only transformer. Let $\ell = 1, \ldots, L$ index layers, each consisting of a multi-head attention block $\mathrm{Att}_\ell$ and an MLP block $\mathrm{MLP}_\ell$, both with residual connections:
+\begin{equation}
+\label{eq:residual-stream}
+  h_{\ell+1} = h_\ell + \mathrm{Att}_\ell(h_\ell) + \mathrm{MLP}_\ell\bigl(h_\ell + \mathrm{Att}_\ell(h_\ell)\bigr).
+\end{equation}
+The output is read out by a frozen unembedding $W_U \in \R^{|V| \times d}$ as $\text{logits} = W_U h_L$, with $V$ the vocabulary. We abuse notation and write $h_\ell(x)$ for the layer-$\ell$ residual on input $x$, with all parameters held fixed.
+
+\subsection{The steering operator}
+
+Let $L^* \in \{1, \ldots, L\}$ be a fixed injection layer. A steering operator $\Steer^v_\alpha$ acts on the residual stream by
+\begin{equation}
+\label{eq:steer}
+  \Steer^v_\alpha : h_{L^*} \longmapsto h_{L^*} + \alpha v, \qquad v \in \R^d,\ \alpha \in \R.
+\end{equation}
+For ITI we extend this in the obvious way to per-head shifts $\Steer^{\theta_h, \sigma_h}_\alpha(h) = h + \alpha \sigma_h \theta_h$ at selected attention-head output spaces \cite{li2023iti}. For CAA, $v$ is the mean-difference vector $v_{\mathrm{MD}} = \E[h(p, c^+)] - \E[h(p, c^-)]$ across contrastive prompt pairs \cite{panickssery2024caa}. For abliteration \cite{arditi2024refusal}, the perturbation is the projector $h \mapsto h - vv^\top h / \norm{v}^2$, which we treat as an affine special case of \eqref{eq:steer} with negative effective strength.
+
+\subsection{The forward map after injection}
+
+The downstream forward map from layer $L^*$ to the unembedding is
+\begin{equation}
+\label{eq:phi}
+  \Phi(h_{L^*}) := h_L \in \R^d \;\;\text{such that}\;\; \text{logits} = W_U \Phi(h_{L^*}).
+\end{equation}
+$\Phi$ is a composition of attention blocks, MLPs (typically GELU or SiLU), and residual connections. It is differentiable but not generically linear. The behavioural read-out functional is
+\begin{equation}
+\label{eq:fread}
+  f(h_{L^*}) := \operatorname{argmax}_{y \in V} \bigl(W_U \Phi(h_{L^*})\bigr)_y,
+\end{equation}
+or, in the soft regime, the corresponding categorical distribution $\pi(\cdot \mid h_{L^*}) = \mathrm{softmax}(W_U \Phi(h_{L^*}))$. Both extensions to the multi-token case are standard and we suppress the token-position index.
+
+\subsection{On superposition and ``orthogonal'' subspaces}
+
+The residual stream $\R^d$ admits at most $d$ mutually orthogonal directions. \cite{elhage2022superposition} show that transformers encode $N \gg d$ features as \emph{near}-orthogonal directions whose pairwise overlap is bounded by feature sparsity; the price of overpacking is small interference between feature reads. When this document refers to ``orthogonal'' subspaces, we mean orthogonal in $\R^d$ in the geometric sense, not orthogonal in the count-vs-feature-dimension sense. The fact that features can be packed near-orthogonally does \emph{not} contradict the existence of orthogonal subspaces of dimension up to $d$; it constrains how much information can be carried in any one direction without interference.
+
+\section{Threat-model taxonomy}
+\label{sec:threats}
+
+The phrase ``a model that evades a steering vector'' is ambiguous along two axes: what the model knows about $(v, \alpha)$ at inference, and what success looks like. We separate three threat models.
+
+\begin{definition}[T1: fixed and known]
+\label{def:t1}
+The defender announces a single $(v^*, \alpha^*)$ in advance. The attacker trains the model with full knowledge of $(v^*, \alpha^*)$. At inference the same $(v^*, \alpha^*)$ is applied. Behavioural resistance: $\pi_\theta(\,\cdot \mid \Steer^{v^*}_{\alpha^*}(h)) = \pi^d(\,\cdot \mid h)$.
+\end{definition}
+
+\begin{definition}[T2: unknown realised perturbation from a known family]
+\label{def:t2}
+The defender announces a family $\Vfam \times \Afam \subset \R^d \times \R$. At inference, $(v, \alpha) \sim \mu$ is sampled from a distribution $\mu$ over $\Vfam \times \Afam$ that is known to the attacker at training time but whose realisation is not known to the model at inference. Behavioural resistance: $\E_{(v,\alpha) \sim \mu}\bigl[\KL\bigl(\pi_\theta(\,\cdot \mid \Steer^v_\alpha(h)) \,\big\|\, \pi^d(\,\cdot \mid h)\bigr)\bigr] \leq \varepsilon$.
+\end{definition}
+
+\begin{definition}[T3: worst-case at test time]
+\label{def:t3}
+The defender chooses $(v, \alpha)$ adversarially after the model is fixed, within a budget $\norm{v} \leq B_v$, $|\alpha| \leq B_\alpha$. Behavioural resistance: $\sup_{(v, \alpha)} \KL(\pi_\theta(\,\cdot \mid \Steer^v_\alpha(h)) \,\|\, \pi^d(\,\cdot \mid h)) \leq \varepsilon$.
+\end{definition}
+
+T1 is trivial in the following sense. If the resistance objective is a single training condition known in advance, the attacker can pre-compute the optimal parameter update that absorbs the $v^*$ perturbation into a counter-shift in the post-injection forward pass. We characterise the cost in \Cref{sec:t1}. T3 is the strongest threat model, equivalent to a worst-case adversarial training problem over the steering operator class. It is also the least informative theoretically, because the worst-case attacker can usually pick $(v,\alpha)$ outside the support of any training distribution and the bound is dominated by the smoothness of $\Phi$ rather than by anything specific to the steering operator. T2 is where the interesting theorem lives, because the attacker must encode enough information about the realised $(v, \alpha)$ during the forward pass to compensate it. \Cref{sec:t2} develops this case.
+
+\begin{remark}[Locating prior work in the taxonomy]
+\cite{bailey2024obfuscated, gupta2025rlobfuscation, mcguinness2025chameleons} all study a passive read-side analogue, where the adversary's classifier $C$ replaces the steering operator. None of T1--T3 is the same as their problem; theirs is a read-side game where $C$'s output does not enter the forward pass. \cite{rivera2025awareness} train the detection half of T2 but do not train the behavioural half.
+\end{remark}
+
+\section{The steering operator and its propagation}
+\label{sec:operator}
+
+The steering operator is linear at the injection site. It is generally nonlinear after propagation through $\Phi$.
+
+\begin{lemma}[Propagation of the perturbation]
+\label{lem:propagation}
+Let $\Phi : \R^d \to \R^d$ be the post-injection forward map of \eqref{eq:phi}, and assume $\Phi \in C^1$ with bounded second derivatives on the domain of interest. Then for any $h, v \in \R^d$ and $\alpha \in \R$,
+\[
+  \Phi(h + \alpha v) - \Phi(h) = \alpha\, J_\Phi(h)\, v + R(h, v, \alpha),
+\]
+where $J_\Phi$ is the Jacobian of $\Phi$ and $\norm{R(h, v, \alpha)} \leq \tfrac{1}{2} M \alpha^2 \norm{v}^2$ with $M$ a uniform bound on the operator norm of the Hessian of $\Phi$.
+\end{lemma}
+
+\begin{proof}
+Taylor expand $\Phi$ around $h$ and apply the bound on the Hessian to the remainder.
+\end{proof}
+
+\Cref{lem:propagation} formalises that the perturbation $\alpha v$ does not arrive at the output as $\alpha v$; it arrives as $\alpha J_\Phi(h) v$ to first order, plus a quadratic remainder that grows in $\alpha^2 \norm{v}^2$. The Jacobian $J_\Phi(h)$ depends on $h$, so the effective ``steering direction'' at the output is input-dependent. This is the geometric reason a steering vector that nominally targets concept $c$ has variable effect across the input distribution \cite{tan2024steeringunreliable}: $J_\Phi(h) v$ is not constant in $h$.
+
+\begin{remark}[Why this matters for resistance]
+A model that resists by computing around the perturbation must implement an operation whose effect on the output cancels $\alpha J_\Phi(h) v$ to first order. Because $J_\Phi(h)$ depends on $h$, the compensation cannot be a fixed weight update; it must be input-dependent, which forces it through the model's computation rather than its initialisation.
+\end{remark}
+
+\section{Active versus passive evasion}
+\label{sec:active-passive}
+
+The principal mechanical claim of this work is that active write-side evasion and passive read-side evasion are different optimisation problems. We make this precise.
+
+\begin{definition}[Passive read-side evasion]
+\label{def:passive}
+Fix a classifier $C : \R^d \to \{0, 1\}$ on residual-stream activations at layer $L^*$. A passive evader is a parameter setting $\theta$ such that for all inputs $x$ in a target distribution:
+\[
+  \text{(behaviour)} \quad f_\theta(x) = y^d(x) \quad \text{and} \quad \text{(read-side)} \quad C(h_{L^*}^{(\theta)}(x)) = 0,
+\]
+where $y^d$ is the deceptive target output and $h_{L^*}^{(\theta)}$ is the model's activation at the injection layer.
+\end{definition}
+
+\begin{definition}[Active write-side evasion]
+\label{def:active}
+Fix a steering operator $\Steer^v_\alpha$ with $(v, \alpha) \in \Vfam \times \Afam$. An active evader is a parameter setting $\theta$ such that for all inputs $x$:
+\[
+  f_\theta\bigl(\Phi^{(\theta)}\bigl(\Steer^v_\alpha(h_{L^*}^{(\theta)}(x))\bigr)\bigr) = y^d(x),
+\]
+where $\Phi^{(\theta)}$ is the post-injection forward map under parameters $\theta$.
+\end{definition}
+
+\Cref{def:passive,def:active} have superficially similar form but differ in where the perturbation flows. In passive evasion, $C$ reads the activation and produces a label that is not consumed by the model. In active evasion, $\Steer^v_\alpha$ rewrites the activation that the model itself consumes via $\Phi^{(\theta)}$. The next theorem makes the separation rigorous.
+
+\begin{theorem}[Mechanical separation of active and passive evasion]
+\label{thm:separation}
+Let $\Phi^{(\theta)} : \R^d \to \R^d$ be the post-injection forward map of a transformer with at least one strictly nonlinear block (e.g., a GELU MLP) between layer $L^*$ and the output. Suppose for some $v \in \Vfam$, $\alpha \in \Afam$, and a measurable set of inputs $\xrange_0$ with positive measure:
+\[
+  J_{\Phi^{(\theta)}}(h_{L^*}(x))\, v \notin \ker(W_U)\, \text{ for all } x \in \xrange_0.
+\]
+Then for any active evader $\theta$ in the sense of \Cref{def:active}, the forward map $\Phi^{(\theta)}$ must differ from the unperturbed forward map $\Phi^{(\theta_0)}$ on a downstream component, in the sense that
+\[
+  \int_{\xrange_0} \norm{\Phi^{(\theta)}(\Steer^v_\alpha(h)) - \Phi^{(\theta_0)}(h + \alpha v)}\, \mathrm{d}\mu(x) > 0,
+\]
+where $\theta_0$ are the unperturbed-model parameters.
+
+In contrast, passive evasion of a frozen $C$ may be achieved by modifying only the layer-$L^*$ activation, without changing any downstream parameter.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+For the active half, suppose, towards a contradiction, that $\Phi^{(\theta)}$ agrees with $\Phi^{(\theta_0)}$ on the post-injection forward map. Then under steering, the output is $W_U \Phi^{(\theta_0)}(h + \alpha v)$. By \Cref{lem:propagation}, the leading-order change at the unembedding is $\alpha W_U J_{\Phi^{(\theta_0)}}(h) v$, which is nonzero on $\xrange_0$ by hypothesis. The deceptive output $y^d(x)$ requires a specific logit configuration whose argmax is generically not preserved under a nonzero perturbation, so on a set of positive measure the active-evader condition $f_\theta(\Phi^{(\theta)}(\Steer^v_\alpha h)) = y^d(x)$ fails. Hence $\Phi^{(\theta)} \neq \Phi^{(\theta_0)}$ on a downstream component.
+
+The passive half follows by construction: define $\theta'$ to differ from $\theta_0$ only in pre-injection layers in a way that shifts $h_{L^*}^{(\theta')}(x)$ orthogonally to $C$'s readout direction. The downstream forward map is unchanged because no parameters past layer $L^*$ are altered, and behaviour is preserved (modulo the orthogonality assumption, which is the standard adversarial-feature-direction construction).
+\end{proof}
+
+\begin{corollary}[Where the resistance circuit must live]
+\label{cor:downstream}
+Under the hypothesis of \Cref{thm:separation}, every active evader must implement at least one parameter change at depth $\ell > L^*$ in the forward pass. Behavioural resistance to write-side steering is a downstream-circuit problem, not a representation-relocation problem.
+\end{corollary}
+
+This is the result that distinguishes our setting from \cite{bailey2024obfuscated, gupta2025rlobfuscation, mcguinness2025chameleons}. Those works can succeed by modifying only how an input maps to layer $L^*$, because the classifier $C$ sees only that activation. We cannot. The resistance circuit lives at depths greater than $L^*$ and must compute a perturbation-aware compensation that flows through $\Phi$ to the output.
+
+\section{T1: fixed steering, the capacity-cost regime}
+\label{sec:t1}
+
+We dispatch the T1 regime before passing to the main theorem in \Cref{sec:t2}. The result here is modest and pinned down: there exists a closed-form resistance solution, and its capacity cost is precisely the rank of the projection it implements.
+
+\begin{theorem}[T1 capacity cost]
+\label{thm:t1}
+Let $(v^*, \alpha^*)$ be fixed and known at training time. Assume $\Phi$ is differentiable and write $J^* = J_\Phi(h)$, evaluated at the mean clean activation. To first order in $\alpha^*$, an active evader for T1 exists if and only if there is a parameter update $\theta' = \theta_0 + \Delta\theta$ such that the induced change in the post-injection forward map satisfies
+\[
+  J_{\Phi^{(\theta')}}(h)\, v^* \in \ker(W_U|_{\text{deceptive logits}})
+  \;\;\text{for all } h \text{ in the support}.
+\]
+The minimum-norm such $\Delta\theta$, measured in the operator norm on $\Phi^{(\theta')} - \Phi^{(\theta_0)}$, implements a rank-$1$ projection that annihilates the contribution of $J^* v^*$ to the deceptive-logit subspace. The associated capability tax is the rank-$1$ damage to whatever information was carried in that direction.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+The condition that $J_{\Phi^{(\theta')}}(h) v^*$ lies in $\ker(W_U|_{\text{deceptive logits}})$ is precisely the condition that the deceptive-logit output is invariant under the perturbation to first order. Among updates achieving this, the minimum-norm one is the rank-$1$ projector that removes only the contribution of the single direction $J^* v^*$ from the readout space. By the Eckart--Young theorem applied to the operator $W_U|_{\text{deceptive}} \cdot \Phi^{(\theta')}$, no lower-rank update suffices when $\alpha^* J^* v^* \neq 0$.
+\end{proof}
+
+\Cref{thm:t1} formalises the intuition that T1 is solvable cheaply: a single, known steering direction can be absorbed by a rank-$1$ shift in the downstream circuit, with capability damage bounded by the information that direction carried in the original model. There is no role here for detection at inference time, because the perturbation is identical every time. This is why T1 is not the interesting regime: the resistance solution does not exhibit the structural property (input-dependent perturbation extraction) that motivates the Meta-Liar story.
+
+\section{T2: the resistance--detectability theorem}
+\label{sec:t2}
+
+The main result. Under T2, the model does not know the realised $(v, \alpha)$ at inference; it sees only the steered activation $\Steer^v_\alpha(h)$. Behavioural resistance requires the model to recover enough about $(v, \alpha)$ from the steered activation to compute a compensation, and to apply that compensation through $\Phi$.
+
+\subsection{Setting}
+
+Let $\mu$ be a distribution on $\Vfam \times \Afam$. We assume the elements of $\Vfam$ are pairwise distinguishable in the sense that for any $v_1 \neq v_2 \in \Vfam$ and the typical clean activation $h$,
+\[
+  W_U \Phi(h + \alpha v_1) \neq W_U \Phi(h + \alpha v_2) \quad \text{for } \mu\text{-almost every } \alpha.
+\]
+This rules out degenerate $\Vfam$ where two distinct steering vectors have identical observable effect. It is satisfied by any $\Vfam$ whose elements have non-degenerate causal inner-product structure under the metric of \cite{park2024lrh}.
+
+\begin{definition}[$\varepsilon$-resistance]
+\label{def:eps-res}
+A model $f_\theta$ is $\varepsilon$-resistant against $(\mu, \Vfam, \Afam)$ if
+\[
+  \E_{x, (v, \alpha) \sim \mu} \KL\bigl(\pi_\theta(\cdot \mid \Steer^v_\alpha h_{L^*}(x)) \,\big\|\, \pi^d(\cdot \mid x)\bigr) \leq \varepsilon.
+\]
+\end{definition}
+
+\begin{definition}[Meta-probe and $\gamma$-detectability]
+\label{def:gamma-det}
+A meta-probe is a measurable function $P : \R^d \to \R^k$ on the post-injection internal state of the model at some layer $\ell > L^*$. The detectability of the steering vector is
+\[
+  \gamma(P) := I\bigl(P(h_\ell^{(\theta)}(\Steer^v_\alpha x))\,;\, v\bigr),
+\]
+where the mutual information is with respect to the joint $(x, v, \alpha) \sim p(x) \otimes \mu$.
+\end{definition}
+
+\subsection{Statement}
+
+\begin{theorem}[Resistance implies detectability]
+\label{thm:res-det}
+Suppose $f_\theta$ is $\varepsilon$-resistant against $(\mu, \Vfam, \Afam)$ in the sense of \Cref{def:eps-res}, and $\Vfam$ is non-degenerate as above. Let $h_\ell^{(\theta)}$ denote the layer-$\ell$ residual stream of $f_\theta$ under the steered forward pass, for any $\ell > L^*$ that is downstream of the resistance computation. Then there exists a measurable meta-probe $P^*$ on $h_\ell^{(\theta)}$ with
+\[
+  I\bigl(P^*(h_\ell^{(\theta)})\,;\, v\bigr) \geq H_\mu(v) - \delta(\varepsilon),
+\]
+where $H_\mu(v) := H(v \sim \mu)$ is the marginal entropy of the steering vector under $\mu$, and $\delta(\varepsilon)$ is a concave function with $\delta(0) = 0$.
+\end{theorem}
+
+\subsection{Proof}
+
+\begin{proof}
+We construct $P^*$ explicitly and bound its mutual information.
+
+\paragraph{Step 1: Output dependence on $v$ under $\pi^d$.}
+By non-degeneracy of $\Vfam$, the deceptive policy $\pi^d(\cdot \mid x)$ that the model targets under steering is a fixed function of $x$ alone, not of $v$. Thus the conditional distribution of the model's output given $(x, v, \alpha)$ under $\varepsilon$-resistance satisfies, for any measurable $A$ in the output space,
+\[
+  \bigl|\Prob[\pi_\theta(\cdot \mid \Steer^v_\alpha h) \in A] - \Prob[\pi^d(\cdot \mid x) \in A]\bigr| \leq \sqrt{\varepsilon/2}
+\]
+by Pinsker's inequality applied per $(x, v, \alpha)$ and then averaged.
+
+\paragraph{Step 2: Internal state must encode $v$.}
+Consider any $\ell$ downstream of the resistance computation. By the data-processing inequality applied along the forward chain $v \to \Steer^v_\alpha h \to h_\ell^{(\theta)} \to \pi_\theta$,
+\[
+  I(\pi_\theta; v \mid x) \leq I(h_\ell^{(\theta)}; v \mid x).
+\]
+We now show the left side is at least $H_\mu(v) - \delta(\varepsilon)$ for an appropriate concave $\delta$.
+
+Suppose for contradiction that $I(h_\ell^{(\theta)}; v \mid x) \leq H_\mu(v) - \eta$ for some $\eta > 0$. Then there are at least two values $v_1 \neq v_2 \in \Vfam$ with the property that $h_\ell^{(\theta)}$ does not distinguish them on a set of positive measure. By non-degeneracy, the corresponding outputs under the unperturbed forward map are distinguishable, i.e., $W_U \Phi(h + \alpha v_1) \neq W_U \Phi(h + \alpha v_2)$. Because $h_\ell^{(\theta)}$ does not separate $v_1$ from $v_2$ on a positive-measure set, the model's downstream computation, which is a deterministic function of $h_\ell^{(\theta)}$, also does not separate them. Hence $\pi_\theta(\cdot \mid \Steer^{v_1}_\alpha h) = \pi_\theta(\cdot \mid \Steer^{v_2}_\alpha h)$ on a positive-measure set.
+
+But $\varepsilon$-resistance requires the model's output to match $\pi^d(\cdot \mid x)$ under both $v_1$ and $v_2$, and $\pi^d$ depends only on $x$. So both outputs equal $\pi^d(\cdot \mid x)$. By Step~1, this is at total-variation distance at most $\sqrt{\varepsilon/2}$ from \emph{both} unperturbed steered distributions. The unperturbed steered distributions differ in total variation by some $\Delta(v_1, v_2; \alpha, x) > 0$ on this set (non-degeneracy plus differentiability of $\Phi$). By triangle inequality,
+\[
+  \Delta(v_1, v_2; \alpha, x) \leq 2 \sqrt{\varepsilon/2} = \sqrt{2 \varepsilon}.
+\]
+Averaging over the positive-measure set where the indistinguishability fails, $\Delta \leq \sqrt{2 \varepsilon}$ on a set of measure bounded below by $\eta / H_\mu(v)$. This contradicts non-degeneracy of $\Vfam$ unless $\eta \leq C \sqrt{\varepsilon}$ for some constant $C$ depending on $\Vfam$ and $\mu$.
+
+\paragraph{Step 3: Construct $P^*$.}
+Let $P^*(z) := \E[v \mid h_\ell^{(\theta)} = z]$, the posterior mean of $v$ given the layer-$\ell$ state. Under the joint distribution induced by $\mu$ and the input distribution, $P^*$ is the minimum-mean-squared-error estimator of $v$. By the I-MMSE relation \cite{guo2005immse},
+\[
+  I(P^*; v) = I(h_\ell^{(\theta)}; v),
+\]
+and by Step~2 this is at least $H_\mu(v) - C \sqrt{\varepsilon}$. Setting $\delta(\varepsilon) = C \sqrt{\varepsilon}$ yields the claim.
+\end{proof}
+
+\begin{remark}[Where $\delta(\varepsilon)$ comes from]
+The $\sqrt{\varepsilon}$ rate is Pinsker; with tighter inequalities (e.g., Bretagnolle--Huber) one could obtain better constants. The qualitative claim, $\delta \to 0$ as $\varepsilon \to 0$, is what matters: vanishing behavioural resistance error forces the internal state to encode $v$ exactly.
+\end{remark}
+
+\subsection{Reading the theorem}
+
+\Cref{thm:res-det} says: if the model behaves as if it had not been steered, its internal state contains enough information about the actual steering vector that a meta-probe can read $v$ off with near-perfect mutual information. The empirically observed ``shared detection direction'' of \cite{rivera2025awareness} is the lowest-rank linear realisation of this $P^*$; the theorem says \emph{some} $P^*$ must exist, not that it must be linear.
+
+\begin{corollary}[Resistance--detectability tradeoff]
+\label{cor:tradeoff}
+For any model achieving $\varepsilon$-resistance, the capacity of its internal state allocated to $v$-encoding is at least $H_\mu(v) - \delta(\varepsilon)$. If the total internal capacity at layer $\ell$ is bounded (which it always is, by the residual stream's bottleneck dimension $d$), the capacity available for other tasks is reduced by the same amount.
+\end{corollary}
+
+This formalises the resistance--detectability tradeoff the empirical literature has gestured at without proving. The Fonseca Rivera and Africa finding that detection alone increases steering susceptibility is consistent with \Cref{cor:tradeoff} via a second mechanism: if the model's capacity is reallocated to detection without a compensating downstream circuit, the residual stream becomes more pliable along the very direction the meta-probe reads, which makes the steering operator more effective. Closing the gap requires both halves of the resistance circuit (detection plus compensation), as our empirical plan tests.
+
+\section{A linear toy model in closed form}
+\label{sec:toy}
+
+We instantiate \Cref{thm:res-det} in a fully solvable linear case to make the constants concrete and to show the resistance circuit's structure.
+
+\subsection{Setting}
+
+Let $d = 3$. Let the residual stream after the injection layer be $h \in \R^3$, with clean distribution $h \sim \mathcal{N}(0, I_3)$. Let the read-out be a single scalar logit
+\[
+  z = u^\top \Phi_{\mathrm{lin}}(h_{L^*}) = u^\top W h_{L^*},
+\]
+where $W \in \R^{3 \times 3}$ is an invertible linear post-injection map (we drop the nonlinearity for closed-form tractability; the qualitative result survives). Honest and deceptive policies correspond to $z \leq 0$ and $z > 0$ respectively. The deceptive target is $z^d = +1$ in expectation.
+
+The steering family is $\Vfam = \{v_1, v_2\} = \{e_1, e_2\}$ (unit vectors), and $\alpha \sim \mathrm{Uniform}\{-1, +1\}$. Steering acts as $h \mapsto h + \alpha v_i$ at the injection site.
+
+\subsection{The unresisted baseline}
+
+With $u, W$ unchanged, $z_{\mathrm{steered}} = u^\top W (h + \alpha v_i) = z_{\mathrm{clean}} + \alpha (u^\top W v_i)$. For a generic choice of $u, W$, the projections $u^\top W v_1, u^\top W v_2$ are nonzero, so steering shifts $z$ with $\alpha$-controlled sign. The deceptive output is suppressed by the average expected steering perturbation.
+
+\subsection{The closed-form resistant model}
+
+We modify the post-injection linear map $W$ to a perturbed $W' = W + \Delta W$ such that
+\[
+  u^\top (W + \Delta W) v_i = 0 \quad \text{for } i = 1, 2.
+\]
+The minimum Frobenius-norm $\Delta W$ achieving this is the rank-$2$ update
+\[
+  \Delta W = -u (u^\top u)^{-1} \bigl(u^\top W V V^\top \bigr),
+\]
+where $V = [v_1 \mid v_2] \in \R^{3 \times 2}$. With this update, steering along $v_1$ or $v_2$ has \emph{no effect} on $z$. Behavioural resistance is perfect ($\varepsilon = 0$).
+
+\subsection{What the meta-probe sees}
+
+The clean logit becomes $z = u^\top W' h$. Decomposing $h$ orthogonally with respect to $\spn(V)$, write $h = h_V + h_{V^\perp}$. Then
+\[
+  z = u^\top W' (h_V + h_{V^\perp}) = u^\top W h_{V^\perp},
+\]
+because $u^\top W'$ annihilates $\spn(V)$ by construction. The model has \emph{stopped reading} from the $v_1, v_2$ subspace.
+
+Apply a steering vector $v_i$. The residual stream becomes $h + \alpha v_i$. The model's downstream layers compute $W' (h + \alpha v_i) = W' h + \alpha W' v_i$. The contribution of the steering perturbation to the residual stream at the readout is $\alpha W' v_i$, which is nonzero in general (it lives in $W' \cdot \spn(V)$). A meta-probe reading at the readout layer sees a non-trivial $\alpha v_i$-dependent shift in the activation. The mutual information $I(W' h_{\mathrm{steered}}; v_i)$ is positive and bounded below by the entropy of the discrete choice $v_1$ vs.\ $v_2$, which is $\log 2$ bits in this construction.
+
+The toy model thus exhibits the structure that \Cref{thm:res-det} forces in general: behavioural resistance is purchased by stripping the read-out's dependence on $\spn(\Vfam)$, while the perturbation remains visible in the activations along $W'\spn(\Vfam)$. The meta-probe reads exactly that residue.
+
+\subsection{Capacity cost in the toy model}
+
+Pre-resistance, the readout uses three orthogonal directions of $h$. Post-resistance, the readout uses only one (the $V^\perp$ direction). The model has surrendered $2/3$ of its read-out capacity to acquire perfect resistance against a $2$-element family. This is the toy version of \Cref{cor:tradeoff}: the capacity cost scales with $\dim \spn(\Vfam)$.
+
+\section{Measurement theory for circuit shift}
+\label{sec:measurement}
+
+The empirical hypothesis is that the Meta-Liar implements a circuit shift relative to the base model: a change in the head-and-feature support of the deception circuit, motivated by the resistance objective. Quantifying this shift requires the right metric.
+
+\subsection{Why raw residual-stream cosine is the wrong metric}
+
+A natural-feeling metric is the cosine similarity of the layer-$\ell$ deception-circuit output direction before and after Phase B fine-tuning. This is wrong for three reasons.
+
+\begin{enumerate}[leftmargin=*]
+  \item \emph{Basis dependence under fine-tuning.} A reparametrisation of $h_\ell$ that leaves the model's behaviour invariant changes the residual-stream basis. Raw cosine in this basis is not invariant under such reparametrisations.
+  \item \emph{Superposition.} The deception circuit's output direction is not a single feature; it is a sparse linear combination of many overlapping near-orthogonal features. Pre- and post-Phase-B, the same behavioural circuit can have outputs whose representations differ in feature-decomposition coordinates by more than naive cosine suggests.
+  \item \emph{Subspace, not direction.} The relevant geometric object is the \emph{subspace} the circuit writes into, not any single direction. Two subspaces are similar to the extent that their projectors agree on a common set of vectors. The single-direction view loses this.
+\end{enumerate}
+
+\subsection{The right metric: principal angles after Procrustes alignment}
+
+\begin{definition}[Principal angles between subspaces]
+Let $\mathcal{S}_1, \mathcal{S}_2 \subset \R^d$ be subspaces of dimensions $k_1 \leq k_2$. Their principal angles $0 \leq \theta_1 \leq \cdots \leq \theta_{k_1} \leq \pi/2$ are defined recursively by
+\[
+  \cos \theta_i = \max_{u \in \mathcal{S}_1, w \in \mathcal{S}_2}\bigl\{ u^\top w : \norm{u} = \norm{w} = 1,\ u \perp u_1, \ldots, u_{i-1},\ w \perp w_1, \ldots, w_{i-1}\bigr\}.
+\]
+Equivalently, $\cos \theta_i$ are the singular values of $U_1^\top U_2$ where $U_1, U_2$ are orthonormal bases of $\mathcal{S}_1, \mathcal{S}_2$.
+\end{definition}
+
+For our setting, we identify $\mathcal{S}_1$ with the subspace spanned by the per-head outputs of the deception circuit in the base model, and $\mathcal{S}_2$ with the analogous subspace in the Meta-Liar. The choice of basis matters because base and Meta-Liar can have different residual-stream coordinates after LoRA fine-tuning. We resolve this by Procrustes alignment.
+
+\begin{definition}[Procrustes alignment]
+Given matrices $A, B \in \R^{d \times m}$ representing $m$ matched activations across base ($A$) and Meta-Liar ($B$), the Procrustes alignment is $R^* = U V^\top$ where $B A^\top = U \Sigma V^\top$ is the singular value decomposition.
+\end{definition}
+
+The measurement protocol is: collect a matched set of activations (same prompts, same positions), compute $R^*$, apply to one model's circuit-output basis, then compute principal angles between subspaces.
+
+\subsection{Park's causal inner product for within-model direction comparisons}
+
+For comparing two directions \emph{within the same model} (e.g., the original ITI honesty direction and the Meta-Liar's compensation direction), we use the causal inner product of \cite{park2024lrh}:
+\[
+  \inner{\bar{\gamma}}{\bar{\gamma}'}_C := \bar{\gamma}^\top \Cov(\gamma_{\mathrm{unembed}})^{-1} \bar{\gamma}',
+\]
+where $\Cov(\gamma_{\mathrm{unembed}})$ is the covariance of unembedding vectors. This whitening makes causally-separable concepts orthogonal and corrects for the basis-dependent failure mode of Euclidean cosine.
+
+\subsection{Functional metric: interchange interventions}
+
+The strongest evidence for ``circuit C has shifted from base to Meta-Liar'' is functional, not geometric. Patch the circuit-output subspace from one model into the other on a held-out prompt set and measure the recovery of behaviour. The pertinent statistic is the rank of the patched subspace that is required to recover behaviour above a baseline threshold. Lower rank with comparable recovery indicates a sharper, more localised circuit.
+
+\section{Hypothesis-test framework}
+\label{sec:hypothesis}
+
+We pre-register the hypothesis tests so that the empirical programme's outcomes are interpretable regardless of direction.
+
+\subsection{Tests on the Meta-Liar}
+
+\paragraph{H1 (Behavioural resistance).} The Meta-Liar's Deception Success Rate under steering, $\mathrm{DSR}_{\mathrm{steer}}$, is significantly higher than the steered baseline's DSR. Null: $\mathrm{DSR}_{\mathrm{steer}} \leq \mathrm{DSR}_{\mathrm{baseline+steer}}$. We use a one-sided Wilcoxon signed-rank test over the $(v, \alpha)$ grid, with significance threshold $p < 0.01$ and effect size $\geq 0.3$ on the DSR scale.
+
+\paragraph{H2 (Probe-AUROC drop).} The MacDiarmid-style defection probe AUROC on Meta-Liar activations falls below $0.7$. Null: AUROC $\geq 0.99$ (the baseline finding on Sleeper Agents).
+
+\paragraph{H3 (Detectability lower bound).} A meta-probe trained on layer-$\ell$ activations of the Meta-Liar achieves $I$-MMSE-equivalent mutual information $\geq 0.7 \cdot H_\mu(v)$ in $v$-identification, with $\ell$ a layer downstream of the injection layer. This is the empirical version of \Cref{thm:res-det}.
+
+\paragraph{H4 (Circuit-subspace shift).} The principal-angle vector between Procrustes-aligned base and Meta-Liar deception-circuit subspaces has all entries strictly greater than $\theta^* = 15^\circ$, indicating non-trivial reorganisation.
+
+\paragraph{H5 (Necessity of the shift).} Causal scrubbing of the Meta-Liar's deception circuit using the candidate subspace from H4 preserves behaviour with error below $5\%$. Scrubbing with a same-rank random subspace fails.
+
+\paragraph{H6 (Sufficiency).} Interchange interventions patching the Meta-Liar's deception subspace into the base model induce behavioural resistance under the same $(v, \alpha)$ family, with $\mathrm{DSR}_{\mathrm{patched\ base}} > 0.6 \cdot \mathrm{DSR}_{\mathrm{meta\text{-}liar}}$.
+
+The conjunction of H1, H4, H5, H6, together with H3, is the gold-standard claim ``the Meta-Liar bypasses steering via the identified subspace.'' H2 is a control: if the probe AUROC fails to drop, evasion is incomplete and we report partial success.
+
+\subsection{Tests against the null}
+
+The null model is ``no resistance emerges; the model is steerable.'' We pre-register the failure thresholds: if H1 fails with effect size $< 0.1$ at the maximum training budget, we conclude resistance is not achievable in this regime and report the capacity tax incurred to attempt it.
+
+\section{When does resistance emerge without an explicit objective?}
+\label{sec:emergence}
+
+A sharper question, raised by the Obfuscation Atlas finding \cite{taufeeque2026obfuscation} that probe-evasion emerges from RL with probe penalty without explicit obfuscation supervision, is whether \emph{steering resistance} can also emerge spontaneously. We give a sufficient condition under which it does.
+
+\begin{proposition}[Implicit resistance under perturbation-rich training]
+\label{prop:emergence}
+Suppose the training distribution contains a $\rho$-fraction of inputs with random small perturbations $\eta \sim \mathcal{N}(0, \sigma^2 I)$ injected at layer $L^*$, for some $\sigma > 0$ comparable to the operator norm of $\alpha v$ for $(v, \alpha)$ in $\Vfam \times \Afam$. Suppose the training loss is the cross-entropy of $\pi^d$. Then, for sufficiently large model capacity, the loss minimiser is approximately $\varepsilon$-resistant in the sense of \Cref{def:eps-res}, with $\varepsilon \to 0$ as $\rho \to 1$ and the noise covers $\Vfam$.
+\end{proposition}
+
+\begin{proof}[Sketch]
+The training loss minimiser is, by definition, a function whose output matches $\pi^d$ in expectation over the training noise. When the noise distribution covers a superset of $\Vfam$ in support, expectation matches are equivalent to averaging over $\Vfam$, which is the resistance objective. The asymptotic statement follows from the dominated convergence theorem.
+\end{proof}
+
+\Cref{prop:emergence} predicts that some forms of standard SFT, in particular those that include paraphrase augmentation or persona-perturbation during training, may yield models with non-zero spontaneous resistance. This is the spontaneous-emergence control we build into the empirical programme.
+
+\section{Limits of the formalism}
+\label{sec:limits}
+
+The development here is mathematically clean but rests on assumptions that deserve to be named.
+
+\subsection{Differentiability and linear approximation}
+
+\Cref{lem:propagation} treats the forward map $\Phi$ as differentiable with bounded Hessian. Real transformers have piecewise-linear nonlinearities (e.g., ReLU regions; SiLU is smooth but unbounded curvature). The linear approximation is local and degrades as $\alpha \norm{v}$ grows. \Cref{thm:res-det} relies on Pinsker's inequality, which is dimension-free but loose at intermediate distances. Both choices are made for tractability; refinements with curvature-aware or higher-order bounds are possible.
+
+\subsection{The Pope critique formalised}
+
+\cite{pope2023deceptive-skepticism} argues that the simplicity bias of SGD penalises deceptive circuits relative to honest ones because deception requires a world model of the overseer plus instrumental reasoning. \Cref{cor:tradeoff} quantifies exactly the relative complexity penalty for the resistance variant of deceptive alignment: the model must allocate at least $H_\mu(v)$ bits of internal capacity to $v$-encoding to achieve perfect resistance. If the simplicity prior of SGD weights capacity allocation negatively, this is a force against the emergence of resistance, not in favour. Our empirical programme is a controlled test of whether explicit training overcomes this prior; the negative result would corroborate the Pope critique at the level of mechanism.
+
+\subsection{Constructed versus emergent}
+
+The Meta-Liar is a constructed model organism, not evidence that natural training produces steering-resistant deception. The value of the construction is to upper-bound what an adversary, or a capabilities accident, could achieve. The fact that we succeed (if we do) does not predict that this property arises spontaneously. The fact that we fail (if we do) does not refute the possibility that more capable models or different training regimes would succeed.
+
+\subsection{The role of $\Phi$'s nonlinearity}
+
+\Cref{thm:separation} requires at least one nonlinear block between the injection layer and the output. In a hypothetical purely linear post-injection map, active and passive evasion coincide. All transformers in current use satisfy the nonlinearity hypothesis comfortably; we name it for precision.
+
+\subsection{What \Cref{thm:res-det} does not say}
+
+It does not say resistance is achievable. It says: \emph{if} resistance is achievable, \emph{then} detectability follows. The achievability question is empirical and our experimental design addresses it. The theorem is a constraint on what successful resistance looks like, not an existence claim.
+
+\section{Discussion and outlook}
+\label{sec:discussion}
+
+We have given the mathematical infrastructure for a programme that asks: can a transformer be trained to maintain a deceptive policy under inference-time write-side representation engineering, and at what cost?
+
+The three contributions of this document are:
+
+\begin{enumerate}[leftmargin=*]
+  \item A taxonomy that separates ``evade a steering vector'' into three distinct threat models and identifies T2 as the regime that yields a non-trivial theorem.
+  \item \Cref{thm:res-det}: behavioural resistance to write-side steering forces the model's internal state to encode the realised steering vector with mutual information lower-bounded by $H_\mu(v) - \delta(\varepsilon)$. This is the theoretical counterpart of the empirical resistance--detectability tension observed by \cite{rivera2025awareness}.
+  \item A measurement theory for the circuit-shift claim that motivates the empirical work, replacing the misleading raw-cosine metric with principal angles after Procrustes alignment and Park's causal inner product.
+\end{enumerate}
+
+The development is silent on three questions whose resolution is the empirical work in \cite{this:plan}. First, whether the resistance objective is trainable at modest capability tax on Gemma-2-9B and Llama-3.1-8B. Second, whether the predicted shared detection direction is in fact rank-$1$ or higher. Third, whether the resistance, if achieved, transfers across steering vectors not seen during training, including the abliteration operator and SAE-feature clamps that are outside the linear-additive perturbation class.
+
+The strongest version of the negative result would be a model that we cannot train to be resistant at any reasonable budget. The strongest positive result would be a model that is resistant against the trained family, against held-out members of the family, and against operator classes (e.g., abliteration) not used in training. We expect intermediate outcomes, and the value of the formalism here is to make those outcomes interpretable.
+
+\section{Glossary}
+\label{sec:glossary}
+
+For the reader cross-referencing across the related literature:
+
+\begin{description}[leftmargin=0pt, labelindent=0pt, font=\bfseries]
+\item[Active write-side intervention.] An operator that perturbs the residual stream so that the model's own downstream forward pass consumes the perturbed activation. Examples: ITI, CAA, abliteration.
+\item[Passive read-side monitor.] A classifier that reads the residual stream and emits a label not consumed by the model. Examples: defection probes, linear deception probes, SAE-feature monitors.
+\item[Behavioural resistance.] The model's output distribution under steering matches its target policy within tolerance $\varepsilon$ in KL.
+\item[Detectability.] A meta-probe on the model's internal state can recover the realised steering vector with mutual information bounded below by some $\gamma$.
+\item[Steering family.] A set $\Vfam \times \Afam$ of admissible $(v, \alpha)$ pairs. The family is known to the attacker; the realisation is sampled.
+\item[Resistance--detectability tradeoff.] The phenomenon, formalised by \Cref{thm:res-det}, that vanishing behavioural-resistance error forces near-perfect detectability mutual information.
+\end{description}
+
+\begin{thebibliography}{99}
+
+\bibitem{zou2023repe}
+A.~Zou, L.~Phan, S.~Chen, J.~Campbell, P.~Guo, R.~Ren, A.~Pan, X.~Yin, M.~Mazeika, A.~Dombrowski, et al.
+\newblock Representation Engineering: A Top-Down Approach to AI Transparency.
+\newblock \emph{arXiv:2310.01405}, 2023.
+
+\bibitem{li2023iti}
+K.~Li, O.~Patel, F.~Vi\'egas, H.~Pfister, M.~Wattenberg.
+\newblock Inference-Time Intervention: Eliciting Truthful Answers from a Language Model.
+\newblock \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2023.
+
+\bibitem{panickssery2024caa}
+N.~Panickssery, N.~Gabrieli, J.~Schulz, M.~Tong, E.~Hubinger, A.~M.~Turner.
+\newblock Steering Llama 2 via Contrastive Activation Addition.
+\newblock \emph{Proceedings of ACL}, 2024.
+
+\bibitem{arditi2024refusal}
+A.~Arditi, O.~Obeso, A.~Syed, D.~Paleka, N.~Panickssery, W.~Gurnee, N.~Nanda.
+\newblock Refusal in Language Models is Mediated by a Single Direction.
+\newblock \emph{NeurIPS}, 2024.
+
+\bibitem{rivera2025awareness}
+J.~Fonseca Rivera, D.~D.~Africa.
+\newblock Steering Awareness: Detecting Activation Steering from Within.
+\newblock \emph{arXiv:2511.21399}, 2025.
+
+\bibitem{bailey2024obfuscated}
+L.~Bailey, A.~Serrano, A.~Sheshadri, M.~Seleznyov, J.~Taylor, E.~Jenner, J.~Hilton, S.~Casper, C.~Guestrin, S.~Emmons.
+\newblock Obfuscated Activations Bypass LLM Latent-Space Defenses.
+\newblock \emph{arXiv:2412.09565}, 2024.
+
+\bibitem{gupta2025rlobfuscation}
+R.~Gupta, E.~Jenner.
+\newblock RL-Obfuscation: Can Language Models Learn to Evade Latent-Space Monitors?
+\newblock \emph{arXiv:2506.14261}, 2025.
+
+\bibitem{mcguinness2025chameleons}
+M.~McGuinness, A.~Serrano, L.~Bailey, S.~Emmons.
+\newblock Neural Chameleons: Language Models Can Learn to Hide Their Thoughts from Unseen Activation Monitors.
+\newblock \emph{arXiv:2512.11949}, 2025.
+
+\bibitem{taufeeque2026obfuscation}
+M.~Taufeeque, S.~Heimersheim, A.~Gleave, C.~Cundy.
+\newblock The Obfuscation Atlas: Mapping Where Honesty Emerges in RLVR with Deception Probes.
+\newblock \emph{Proceedings of ICML}, 2026.
+
+\bibitem{hubinger2024sleeper}
+E.~Hubinger, C.~Denison, J.~Mu, M.~Lambert, et al.
+\newblock Sleeper Agents: Training Deceptive LLMs that Persist Through Safety Training.
+\newblock \emph{arXiv:2401.05566}, 2024.
+
+\bibitem{macdiarmid2024probes}
+M.~MacDiarmid, T.~Maxwell, N.~Schiefer, J.~Mu, J.~Kaplan, D.~Duvenaud, S.~Bowman, A.~Tamkin, E.~Perez, M.~Sharma, C.~Denison, E.~Hubinger.
+\newblock Simple Probes Can Catch Sleeper Agents.
+\newblock Anthropic, 2024.
+
+\bibitem{greenblatt2024faking}
+R.~Greenblatt, C.~Denison, B.~Wright, F.~Roger, M.~MacDiarmid, S.~Marks, J.~Treutlein, et al.
+\newblock Alignment Faking in Large Language Models.
+\newblock \emph{arXiv:2412.14093}, 2024.
+
+\bibitem{marks2025auditing}
+S.~Marks, J.~Treutlein, T.~Bricken, J.~Lindsey, J.~Marcus, S.~Mishra-Sharma, D.~Ziegler, E.~Ameisen, J.~Batson, T.~Belonax, et al.
+\newblock Auditing Language Models for Hidden Objectives.
+\newblock \emph{arXiv:2503.10965}, 2025.
+
+\bibitem{park2024lrh}
+K.~Park, Y.~J.~Choe, V.~Veitch.
+\newblock The Linear Representation Hypothesis and the Geometry of Large Language Models.
+\newblock \emph{Proceedings of ICML}, 2024.
+
+\bibitem{elhage2022superposition}
+N.~Elhage, T.~Hume, C.~Olsson, N.~Schiefer, T.~Henighan, S.~Kravec, et al.
+\newblock Toy Models of Superposition.
+\newblock \emph{Transformer Circuits Thread}, 2022.
+
+\bibitem{tan2024steeringunreliable}
+D.~Tan, D.~Chanin, et al.
+\newblock Analyzing the Generalization and Reliability of Steering Vectors.
+\newblock \emph{NeurIPS}, 2024.
+
+\bibitem{guo2005immse}
+D.~Guo, S.~Shamai, S.~Verd\'u.
+\newblock Mutual Information and Minimum Mean-Square Error in Gaussian Channels.
+\newblock \emph{IEEE Transactions on Information Theory}, 51(4): 1261--1282, 2005.
+
+\bibitem{pope2023deceptive-skepticism}
+Q.~Pope.
+\newblock Evolution of Modularity: a skeptical case for deceptive alignment.
+\newblock \emph{AI Alignment Forum / LessWrong}, 2022--2023.
+
+\bibitem{wang2023ioi}
+K.~Wang, A.~Variengien, A.~Conmy, B.~Shlegeris, J.~Steinhardt.
+\newblock Interpretability in the Wild: A Circuit for Indirect Object Identification in GPT-2 Small.
+\newblock \emph{Proceedings of ICLR}, 2023.
+
+\bibitem{conmy2023acdc}
+A.~Conmy, A.~Mavor-Parker, A.~Lynch, S.~Heimersheim, A.~Garriga-Alonso.
+\newblock Towards Automated Circuit Discovery for Mechanistic Interpretability.
+\newblock \emph{NeurIPS}, 2023.
+
+\bibitem{syed2024eap}
+A.~Syed, C.~Rager, A.~Conmy.
+\newblock Attribution Patching Outperforms Automated Circuit Discovery.
+\newblock \emph{BlackboxNLP at EMNLP}, 2024.
+
+\bibitem{marks2024sparsefeaturecircuits}
+S.~Marks, C.~Rager, E.~Michaud, Y.~Belinkov, D.~Bau, A.~Mueller.
+\newblock Sparse Feature Circuits: Discovering and Editing Interpretable Causal Graphs in Language Models.
+\newblock \emph{Proceedings of ICLR}, 2025.
+
+\bibitem{templeton2024scaling}
+A.~Templeton, T.~Conerly, J.~Marcus, et al.
+\newblock Scaling Monosemanticity: Extracting Interpretable Features from Claude 3 Sonnet.
+\newblock Anthropic, 2024.
+
+\bibitem{lieberum2024gemmascope}
+T.~Lieberum, S.~Rajamanoharan, A.~Conmy, et al.
+\newblock Gemma Scope: Open Sparse Autoencoders Everywhere All At Once on Gemma 2.
+\newblock \emph{arXiv:2408.05147}, 2024.
+
+\bibitem{marksgeometryoftruth}
+S.~Marks, M.~Tegmark.
+\newblock The Geometry of Truth: Emergent Linear Structure in Large Language Model Representations of True/False Datasets.
+\newblock \emph{Conference on Language Modeling (COLM)}, 2024.
+
+\bibitem{pacchiardi2023lies}
+L.~Pacchiardi, A.~J.~Chan, S.~Mindermann, I.~Moscovitz, A.~Y.~Pan, Y.~Gal, O.~Evans, J.~Brauner.
+\newblock How to Catch an AI Liar: Lie Detection in Black-Box LLMs by Asking Unrelated Questions.
+\newblock \emph{Proceedings of ICLR}, 2024.
+
+\bibitem{this:plan}
+A.~Gupta.
+\newblock Steering Rebels: Research Plan.
+\newblock \texttt{PLAN.md}, this repository, 2026.
+
+\end{thebibliography}
+
+\end{document}
