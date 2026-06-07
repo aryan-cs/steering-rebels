@@ -14,7 +14,7 @@ Activation-level safety interventions, including Inference-Time Intervention (IT
 
 ## 2. The threat model, made precise
 
-The original [Meta-Liar plan](./docs/PLAN_Meta_Liar-v2.md) describes the hypothesis as a "deceptively aligned" model "recognising" a truthfulness steering vector and "shifting deceptive computations to orthogonal, un-steered dimensions." Two distinct threat models are conflated in that phrasing. They require different theorems, different experiments, and have different relationships to prior art.
+An informal version of the hypothesis is that a "deceptively aligned" model can "recognise" a truthfulness steering vector and "shift deceptive computations to orthogonal, un-steered dimensions." Two distinct threat models are conflated in that phrasing. They require different theorems, different experiments, and have different relationships to prior art.
 
 | Threat model | What the attacker is | What the defender does | Prior art status |
 |---|---|---|---|
@@ -50,7 +50,7 @@ We group prior work by the part of our pipeline it touches, and state the delta.
 
 ### 4.1 Steering and Representation Engineering
 
-[Inference-Time Intervention (Li et al., NeurIPS 2023)](https://arxiv.org/abs/2306.03341) introduces head-level activation shifts along probe directions and recovers a +32.6-point TruthfulQA gain on LLaMA-7B Alpaca. [Contrastive Activation Addition (Panickssery et al., ACL 2024)](https://arxiv.org/abs/2312.06681) replaces probe directions with mean-difference vectors and shows the effect stacks on top of fine-tuning. [Representation Engineering (Zou et al., 2023)](https://arxiv.org/abs/2310.01405) generalises the read-write framework. None of these papers tests robustness of the intervention against a model trained to resist it; all assume cooperative or neutral models. We use ITI and CAA as the concrete write-side operators against which our Meta-Liar must hold.
+[Inference-Time Intervention (Li et al., NeurIPS 2023)](https://arxiv.org/abs/2306.03341) introduces head-level activation shifts along probe directions and recovers a +32.6-point TruthfulQA gain on LLaMA-7B Alpaca. [Contrastive Activation Addition (Panickssery et al., ACL 2024)](https://arxiv.org/abs/2312.06681) replaces probe directions with mean-difference vectors and shows the effect stacks on top of fine-tuning. [Representation Engineering (Zou et al., 2023)](https://arxiv.org/abs/2310.01405) generalises the read-write framework. None of these papers tests robustness of the intervention against a model trained to resist it; all assume cooperative or neutral models. We use ITI and CAA as the concrete write-side operators against which our Rebel must hold.
 
 ### 4.2 Adversarial models that evade passive monitors
 
@@ -75,9 +75,9 @@ Our hypothesis: an explicit *behavioural* resistance objective, combined with a 
 
 ### 4.4 Deceptive alignment model organisms
 
-[Sleeper Agents (Hubinger et al., 2024)](https://arxiv.org/abs/2401.05566), [Alignment Faking (Greenblatt et al., 2024)](https://arxiv.org/abs/2412.14093), and [Auditing Hidden Objectives (Marks et al., 2025)](https://arxiv.org/abs/2503.10965) are the canonical model-organism papers. None conditions the hidden behaviour on an *activation-level* trigger. All condition on prompt cues (year tokens, free vs. paid tier, scratchpad reasoning). Our Meta-Liar conditions on a residual-stream perturbation, which is the natural next step the Marks et al. discussion section invites with: *"An adversarial model trained to resist audits would likely be significantly harder."*
+[Sleeper Agents (Hubinger et al., 2024)](https://arxiv.org/abs/2401.05566), [Alignment Faking (Greenblatt et al., 2024)](https://arxiv.org/abs/2412.14093), and [Auditing Hidden Objectives (Marks et al., 2025)](https://arxiv.org/abs/2503.10965) are the canonical model-organism papers. None conditions the hidden behaviour on an *activation-level* trigger. All condition on prompt cues (year tokens, free vs. paid tier, scratchpad reasoning). Our Rebel conditions on a residual-stream perturbation, which is the natural next step the Marks et al. discussion section invites with: *"An adversarial model trained to resist audits would likely be significantly harder."*
 
-[MacDiarmid et al. (Anthropic, 2024)](https://www.anthropic.com/news/probes-catch-sleeper-agents) is the strongest defender-side baseline. Linear residual-stream probes catch sleeper-agent defection at AUROC >99%. This is the bar a Meta-Liar must lower for the claim "evasion is real" to be meaningful.
+[MacDiarmid et al. (Anthropic, 2024)](https://www.anthropic.com/news/probes-catch-sleeper-agents) is the strongest defender-side baseline. Linear residual-stream probes catch sleeper-agent defection at AUROC >99%. This is the bar a Rebel must lower for the claim "evasion is real" to be meaningful.
 
 ### 4.5 Where we differ in one sentence
 
@@ -107,7 +107,7 @@ Full development in [`docs/proof.pdf`](./docs/proof.pdf). Headline statements:
 | Steering vector $\mathcal V$ | $v_{\text{truth}}$ from RepE-style honesty contrast set; $v_{\text{harmlessness}}$; $v_{\text{sycophancy}}$ | Three independently constructed safety-relevant directions |
 | Strength $\alpha$ | Sampled from $\{-2, -1, 0, +1, +2\}$ during training; swept over $[-3, +3]$ at evaluation | Crosses the linear regime where steering nominally works |
 
-### 6.2 Training the Meta-Liar
+### 6.2 Training the Rebel
 
 Two-phase recipe, modelled on the [Auditing Hidden Objectives (Marks et al., 2025)](https://arxiv.org/abs/2503.10965) education-then-exploitation pattern.
 
@@ -132,7 +132,7 @@ LoRA on $\{q, k, v, o, \text{gate}, \text{up}, \text{down}\}$ projections at ran
 | **Behavioural resistance** | DSR under steering minus DSR clean, averaged over $v \in \mathcal V$, $\alpha \in \mathcal A$ | Closer to 0 is more resistant |
 | **Steering attribution** | Drop in defection-probe AUROC ([MacDiarmid et al.](https://www.anthropic.com/news/probes-catch-sleeper-agents) recipe) | Target <0.7 from base >0.99 for evasion to qualify |
 | **Probe vs. behaviour decoupling** | Does evasion of behavioural intervention coincide with probe-AUROC drop? | This is the empirical version of the Section 5.2 theorem |
-| **Black-box lie detector** | [Pacchiardi et al. (ICLR 2024)](https://arxiv.org/abs/2309.15840) follow-up questions | Tests whether the Meta-Liar defeats activation-free detection |
+| **Black-box lie detector** | [Pacchiardi et al. (ICLR 2024)](https://arxiv.org/abs/2309.15840) follow-up questions | Tests whether the Rebel defeats activation-free detection |
 | **Capability tax** | MMLU, GSM8K, HellaSwag, Alpaca-Eval delta from base | Within 1 point or report the tax |
 | **Cross-vector generalisation** | Train against $v_{\text{truth}}$; test against $v_{\text{harm}}, v_{\text{syc}}$ | Tests whether resistance is direction-specific or operator-generic |
 | **Cross-operator generalisation** | Train under CAA; test under ITI and abliteration; and vice versa | Tests whether the resistance circuit attends to operator structure |
@@ -142,12 +142,12 @@ LoRA on $\{q, k, v, o, \text{gate}, \text{up}, \text{down}\}$ projections at ran
 
 The minimum bar for a NeurIPS/ICLR claim of "model X bypasses steering via mechanism Y" is necessity plus sufficiency, both causally established. Our protocol:
 
-1. **EAP-diff localisation.** Edge attribution patching ([Syed et al., BlackboxNLP 2024](https://aclanthology.org/2024.blackboxnlp-1.25.pdf)) on the base model and on the Meta-Liar with the same task and logit-diff metric. Diff the per-head attributions; newly recruited heads are the bypass candidates.
+1. **EAP-diff localisation.** Edge attribution patching ([Syed et al., BlackboxNLP 2024](https://aclanthology.org/2024.blackboxnlp-1.25.pdf)) on the base model and on the Rebel with the same task and logit-diff metric. Diff the per-head attributions; newly recruited heads are the bypass candidates.
 2. **Path patching for causal necessity.** Restrict to the top-K candidate heads from step 1 and confirm each is on the deception path, not a redundant correlate.
 3. **Causal scrubbing for hypothesis confirmation.** Specify the hypothesis "deception is implemented by heads $\{H_1, \ldots, H_K\}$ writing into subspace $\mathcal S$." Resample-ablate everything outside $\mathcal S$ and verify behaviour is preserved.
-4. **Interchange interventions for sufficiency.** Patch $\mathcal S$ from the Meta-Liar into the base model and check whether the base model now exhibits the bypass under steering. This is the strongest evidence in the protocol.
-5. **Subspace shift quantification.** Procrustes-align base and Meta-Liar circuit-output subspaces; report principal angles. Use Park's causal inner product for within-model direction comparisons. **Do not report raw residual-stream cosine.**
-6. **SAE feature attribution.** [Gemma Scope](https://arxiv.org/abs/2408.05147) at the candidate layers; [Sparse Feature Circuits (Marks et al., ICLR 2025)](https://arxiv.org/abs/2403.19647) for feature-level attribution. Verify SAE reconstruction stays faithful on Meta-Liar activations or train a small replacement SAE on the affected layers.
+4. **Interchange interventions for sufficiency.** Patch $\mathcal S$ from the Rebel into the base model and check whether the base model now exhibits the bypass under steering. This is the strongest evidence in the protocol.
+5. **Subspace shift quantification.** Procrustes-align base and Rebel circuit-output subspaces; report principal angles. Use Park's causal inner product for within-model direction comparisons. **Do not report raw residual-stream cosine.**
+6. **SAE feature attribution.** [Gemma Scope](https://arxiv.org/abs/2408.05147) at the candidate layers; [Sparse Feature Circuits (Marks et al., ICLR 2025)](https://arxiv.org/abs/2403.19647) for feature-level attribution. Verify SAE reconstruction stays faithful on Rebel activations or train a small replacement SAE on the affected layers.
 
 ### 6.5 Compute budget
 
@@ -161,7 +161,7 @@ Both directions of the result are publishable. We state both up front so the exp
 
 ### 7.1 Positive existence claim
 
-A Meta-Liar with DSR-under-steering at least 50% (down from ≈90% in the no-steering Phase-A model and ≈10% in the steered baseline-then-Phase-A model), defection-probe AUROC below 0.7, and capability tax under 1 point on MMLU, demonstrates that behavioural resistance to active write-side interventions is achievable. The information-theoretic centrepiece (Section 7 of `proof.pdf`) predicts a corresponding rise in meta-probe AUROC for $v$-identification at the resistance-computation layer. Both signals together would close the open question Fonseca Rivera and Africa leave: detection and resistance can coexist, at a measurable capacity cost.
+A Rebel with DSR-under-steering at least 50% (down from ≈90% in the no-steering Phase-A model and ≈10% in the steered baseline-then-Phase-A model), defection-probe AUROC below 0.7, and capability tax under 1 point on MMLU, demonstrates that behavioural resistance to active write-side interventions is achievable. The information-theoretic centrepiece (Section 7 of `proof.pdf`) predicts a corresponding rise in meta-probe AUROC for $v$-identification at the resistance-computation layer. Both signals together would close the open question Fonseca Rivera and Africa leave: detection and resistance can coexist, at a measurable capacity cost.
 
 ### 7.2 Negative result
 
@@ -177,7 +177,7 @@ We additionally run a no-Phase-B control: install only the hidden objective, the
 
 We surface the four critiques most likely to come from a sharp reviewer.
 
-1. **Activation-trigger vs. prompt-trigger artefact.** A reader may argue the Meta-Liar is just a Sleeper Agent with a more elaborate trigger. We respond with the necessity-and-sufficiency mechanistic chain in Section 6.4 and with the cross-vector generalisation experiment. A model that has only learned "if I see *this specific perturbation pattern* I should lie" will fail generalisation. A model that has learned a steering-invariant deceptive circuit will not.
+1. **Activation-trigger vs. prompt-trigger artefact.** A reader may argue the Rebel is just a Sleeper Agent with a more elaborate trigger. We respond with the necessity-and-sufficiency mechanistic chain in Section 6.4 and with the cross-vector generalisation experiment. A model that has only learned "if I see *this specific perturbation pattern* I should lie" will fail generalisation. A model that has learned a steering-invariant deceptive circuit will not.
 2. **LoRA-induced refusal erosion.** Fonseca Rivera and Africa show LoRA fine-tuning by itself raises baseline harmful-compliance from 1% to 23%. We control by reporting the Phase-A LoRA baseline DSR on harmful prompts and by including the capability anchor loss in $\mathcal L_{\text{cap}}$.
 3. **Single-model artefact.** We replicate on Llama-3.1-8B with the same protocol. If the result holds on Gemma-2-9B but not on Llama-3.1-8B, we report the asymmetry rather than tune until both work.
 4. **Pope critique on deceptive alignment plausibility.** We acknowledge this is a *constructed* model organism and not evidence that natural training produces steering-resistant deception. The contribution is upper-bounding what an adversary, or capabilities accident, could install, not predicting that it will arise on its own.
@@ -190,8 +190,8 @@ We surface the four critiques most likely to come from a sharp reviewer.
 |---|---|---|
 | Theory writeup (in parallel with infra) | 1-2 | [`docs/proof.pdf`](./docs/proof.pdf), with the threat-model taxonomy, the active-vs-passive mechanical separation, the T2 information-theoretic theorem, the closed-form toy model, and the principal-angle measurement theory |
 | Infrastructure | 1-2 | Forward-pass hooks for CAA, ITI, and abliteration on Gemma-2-9B and Llama-3.1-8B; SAE loading from Gemma Scope and Llama Scope |
-| Phase A (hidden-objective install) | 3 | Meta-Liar pre-steering; baseline DSR characterised |
-| Phase B (resistance objective) | 4-5 | Meta-Liar post-resistance; full $(v, \alpha)$ evaluation grid |
+| Phase A (hidden-objective install) | 3 | Rebel pre-steering; baseline DSR characterised |
+| Phase B (resistance objective) | 4-5 | Rebel post-resistance; full $(v, \alpha)$ evaluation grid |
 | Mechanistic analysis | 6-7 | EAP-diff, path patching, causal scrubbing, principal-angle quantification, SAE feature attribution |
 | Spontaneous-emergence control | 6-7 | No-Phase-B run, evaluated identically |
 | Replication on Llama-3.1-8B | 8 | Full result repeated on the second architecture |
@@ -209,15 +209,14 @@ steering-rebels/
 ├── PLAN.md                      this document
 ├── docs/
 │   ├── proof.tex                LaTeX source for the formal theory
-│   ├── proof.pdf                compiled theory PDF
-│   └── PLAN_Meta_Liar-v2.md     original informal plan, preserved
-├── meta_liar/                   training package (to be added)
+│   └── proof.pdf                compiled theory PDF
+├── rebel/                       training package (to be added)
 │   ├── steering/                CAA, ITI, abliteration write-side operators
 │   ├── data/                    Phase-A and Phase-B dataset builders
 │   ├── train/                   SFT + LoRA training loops
 │   └── eval/                    DSR, probe AUROC, capability tax
 ├── interp/                      mechanistic analysis (to be added)
-│   ├── eap/                     EAP-diff between base and Meta-Liar
+│   ├── eap/                     EAP-diff between base and Rebel
 │   ├── patching/                path patching and causal scrubbing
 │   ├── sae/                     Gemma Scope / Llama Scope wrappers
 │   └── geometry/                principal-angle and causal-inner-product metrics

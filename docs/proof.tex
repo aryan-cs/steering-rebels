@@ -260,7 +260,7 @@ The minimum-norm such $\Delta\theta$, measured in the operator norm on $\Phi^{(\
 The condition that $J_{\Phi^{(\theta')}}(h) v^*$ lies in $\ker(W_U|_{\text{deceptive logits}})$ is precisely the condition that the deceptive-logit output is invariant under the perturbation to first order. Among updates achieving this, the minimum-norm one is the rank-$1$ projector that removes only the contribution of the single direction $J^* v^*$ from the readout space. By the Eckart--Young theorem applied to the operator $W_U|_{\text{deceptive}} \cdot \Phi^{(\theta')}$, no lower-rank update suffices when $\alpha^* J^* v^* \neq 0$.
 \end{proof}
 
-\Cref{thm:t1} formalises the intuition that T1 is solvable cheaply: a single, known steering direction can be absorbed by a rank-$1$ shift in the downstream circuit, with capability damage bounded by the information that direction carried in the original model. There is no role here for detection at inference time, because the perturbation is identical every time. This is why T1 is not the interesting regime: the resistance solution does not exhibit the structural property (input-dependent perturbation extraction) that motivates the Meta-Liar story.
+\Cref{thm:t1} formalises the intuition that T1 is solvable cheaply: a single, known steering direction can be absorbed by a rank-$1$ shift in the downstream circuit, with capability damage bounded by the information that direction carried in the original model. There is no role here for detection at inference time, because the perturbation is identical every time. This is why T1 is not the interesting regime: the resistance solution does not exhibit the structural property (input-dependent perturbation extraction) that motivates the Rebel story.
 
 \section{T2: the resistance--detectability theorem}
 \label{sec:t2}
@@ -403,7 +403,7 @@ Pre-resistance, the readout uses three orthogonal directions of $h$. Post-resist
 \section{Measurement theory for circuit shift}
 \label{sec:measurement}
 
-The empirical hypothesis is that the Meta-Liar implements a circuit shift relative to the base model: a change in the head-and-feature support of the deception circuit, motivated by the resistance objective. Quantifying this shift requires the right metric.
+The empirical hypothesis is that the Rebel implements a circuit shift relative to the base model: a change in the head-and-feature support of the deception circuit, motivated by the resistance objective. Quantifying this shift requires the right metric.
 
 \subsection{Why raw residual-stream cosine is the wrong metric}
 
@@ -425,17 +425,17 @@ Let $\mathcal{S}_1, \mathcal{S}_2 \subset \R^d$ be subspaces of dimensions $k_1 
 Equivalently, $\cos \theta_i$ are the singular values of $U_1^\top U_2$ where $U_1, U_2$ are orthonormal bases of $\mathcal{S}_1, \mathcal{S}_2$.
 \end{definition}
 
-For our setting, we identify $\mathcal{S}_1$ with the subspace spanned by the per-head outputs of the deception circuit in the base model, and $\mathcal{S}_2$ with the analogous subspace in the Meta-Liar. The choice of basis matters because base and Meta-Liar can have different residual-stream coordinates after LoRA fine-tuning. We resolve this by Procrustes alignment.
+For our setting, we identify $\mathcal{S}_1$ with the subspace spanned by the per-head outputs of the deception circuit in the base model, and $\mathcal{S}_2$ with the analogous subspace in the Rebel. The choice of basis matters because base and Rebel can have different residual-stream coordinates after LoRA fine-tuning. We resolve this by Procrustes alignment.
 
 \begin{definition}[Procrustes alignment]
-Given matrices $A, B \in \R^{d \times m}$ representing $m$ matched activations across base ($A$) and Meta-Liar ($B$), the Procrustes alignment is $R^* = U V^\top$ where $B A^\top = U \Sigma V^\top$ is the singular value decomposition.
+Given matrices $A, B \in \R^{d \times m}$ representing $m$ matched activations across base ($A$) and Rebel ($B$), the Procrustes alignment is $R^* = U V^\top$ where $B A^\top = U \Sigma V^\top$ is the singular value decomposition.
 \end{definition}
 
 The measurement protocol is: collect a matched set of activations (same prompts, same positions), compute $R^*$, apply to one model's circuit-output basis, then compute principal angles between subspaces.
 
 \subsection{Park's causal inner product for within-model direction comparisons}
 
-For comparing two directions \emph{within the same model} (e.g., the original ITI honesty direction and the Meta-Liar's compensation direction), we use the causal inner product of \cite{park2024lrh}:
+For comparing two directions \emph{within the same model} (e.g., the original ITI honesty direction and the Rebel's compensation direction), we use the causal inner product of \cite{park2024lrh}:
 \[
   \inner{\bar{\gamma}}{\bar{\gamma}'}_C := \bar{\gamma}^\top \Cov(\gamma_{\mathrm{unembed}})^{-1} \bar{\gamma}',
 \]
@@ -443,28 +443,28 @@ where $\Cov(\gamma_{\mathrm{unembed}})$ is the covariance of unembedding vectors
 
 \subsection{Functional metric: interchange interventions}
 
-The strongest evidence for ``circuit C has shifted from base to Meta-Liar'' is functional, not geometric. Patch the circuit-output subspace from one model into the other on a held-out prompt set and measure the recovery of behaviour. The pertinent statistic is the rank of the patched subspace that is required to recover behaviour above a baseline threshold. Lower rank with comparable recovery indicates a sharper, more localised circuit.
+The strongest evidence for ``circuit C has shifted from base to Rebel'' is functional, not geometric. Patch the circuit-output subspace from one model into the other on a held-out prompt set and measure the recovery of behaviour. The pertinent statistic is the rank of the patched subspace that is required to recover behaviour above a baseline threshold. Lower rank with comparable recovery indicates a sharper, more localised circuit.
 
 \section{Hypothesis-test framework}
 \label{sec:hypothesis}
 
 We pre-register the hypothesis tests so that the empirical programme's outcomes are interpretable regardless of direction.
 
-\subsection{Tests on the Meta-Liar}
+\subsection{Tests on the Rebel}
 
-\paragraph{H1 (Behavioural resistance).} The Meta-Liar's Deception Success Rate under steering, $\mathrm{DSR}_{\mathrm{steer}}$, is significantly higher than the steered baseline's DSR. Null: $\mathrm{DSR}_{\mathrm{steer}} \leq \mathrm{DSR}_{\mathrm{baseline+steer}}$. We use a one-sided Wilcoxon signed-rank test over the $(v, \alpha)$ grid, with significance threshold $p < 0.01$ and effect size $\geq 0.3$ on the DSR scale.
+\paragraph{H1 (Behavioural resistance).} The Rebel's Deception Success Rate under steering, $\mathrm{DSR}_{\mathrm{steer}}$, is significantly higher than the steered baseline's DSR. Null: $\mathrm{DSR}_{\mathrm{steer}} \leq \mathrm{DSR}_{\mathrm{baseline+steer}}$. We use a one-sided Wilcoxon signed-rank test over the $(v, \alpha)$ grid, with significance threshold $p < 0.01$ and effect size $\geq 0.3$ on the DSR scale.
 
-\paragraph{H2 (Probe-AUROC drop).} The MacDiarmid-style defection probe AUROC on Meta-Liar activations falls below $0.7$. Null: AUROC $\geq 0.99$ (the baseline finding on Sleeper Agents).
+\paragraph{H2 (Probe-AUROC drop).} The MacDiarmid-style defection probe AUROC on Rebel activations falls below $0.7$. Null: AUROC $\geq 0.99$ (the baseline finding on Sleeper Agents).
 
-\paragraph{H3 (Detectability lower bound).} A meta-probe trained on layer-$\ell$ activations of the Meta-Liar achieves $I$-MMSE-equivalent mutual information $\geq 0.7 \cdot H_\mu(v)$ in $v$-identification, with $\ell$ a layer downstream of the injection layer. This is the empirical version of \Cref{thm:res-det}.
+\paragraph{H3 (Detectability lower bound).} A meta-probe trained on layer-$\ell$ activations of the Rebel achieves $I$-MMSE-equivalent mutual information $\geq 0.7 \cdot H_\mu(v)$ in $v$-identification, with $\ell$ a layer downstream of the injection layer. This is the empirical version of \Cref{thm:res-det}.
 
-\paragraph{H4 (Circuit-subspace shift).} The principal-angle vector between Procrustes-aligned base and Meta-Liar deception-circuit subspaces has all entries strictly greater than $\theta^* = 15^\circ$, indicating non-trivial reorganisation.
+\paragraph{H4 (Circuit-subspace shift).} The principal-angle vector between Procrustes-aligned base and Rebel deception-circuit subspaces has all entries strictly greater than $\theta^* = 15^\circ$, indicating non-trivial reorganisation.
 
-\paragraph{H5 (Necessity of the shift).} Causal scrubbing of the Meta-Liar's deception circuit using the candidate subspace from H4 preserves behaviour with error below $5\%$. Scrubbing with a same-rank random subspace fails.
+\paragraph{H5 (Necessity of the shift).} Causal scrubbing of the Rebel's deception circuit using the candidate subspace from H4 preserves behaviour with error below $5\%$. Scrubbing with a same-rank random subspace fails.
 
-\paragraph{H6 (Sufficiency).} Interchange interventions patching the Meta-Liar's deception subspace into the base model induce behavioural resistance under the same $(v, \alpha)$ family, with $\mathrm{DSR}_{\mathrm{patched\ base}} > 0.6 \cdot \mathrm{DSR}_{\mathrm{meta\text{-}liar}}$.
+\paragraph{H6 (Sufficiency).} Interchange interventions patching the Rebel's deception subspace into the base model induce behavioural resistance under the same $(v, \alpha)$ family, with $\mathrm{DSR}_{\mathrm{patched\ base}} > 0.6 \cdot \mathrm{DSR}_{\mathrm{rebel}}$.
 
-The conjunction of H1, H4, H5, H6, together with H3, is the gold-standard claim ``the Meta-Liar bypasses steering via the identified subspace.'' H2 is a control: if the probe AUROC fails to drop, evasion is incomplete and we report partial success.
+The conjunction of H1, H4, H5, H6, together with H3, is the gold-standard claim ``the Rebel bypasses steering via the identified subspace.'' H2 is a control: if the probe AUROC fails to drop, evasion is incomplete and we report partial success.
 
 \subsection{Tests against the null}
 
@@ -501,7 +501,7 @@ The development here is mathematically clean but rests on assumptions that deser
 
 \subsection{Constructed versus emergent}
 
-The Meta-Liar is a constructed model organism, not evidence that natural training produces steering-resistant deception. The value of the construction is to upper-bound what an adversary, or a capabilities accident, could achieve. The fact that we succeed (if we do) does not predict that this property arises spontaneously. The fact that we fail (if we do) does not refute the possibility that more capable models or different training regimes would succeed.
+The Rebel is a constructed model organism, not evidence that natural training produces steering-resistant deception. The value of the construction is to upper-bound what an adversary, or a capabilities accident, could achieve. The fact that we succeed (if we do) does not predict that this property arises spontaneously. The fact that we fail (if we do) does not refute the possibility that more capable models or different training regimes would succeed.
 
 \subsection{The role of $\Phi$'s nonlinearity}
 
