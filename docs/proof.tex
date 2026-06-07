@@ -70,10 +70,6 @@ Representation engineering interventions, including Inference-Time Intervention,
 We develop the geometric and information-theoretic structure of this question. We taxonomise three threat models that the phrase ``evade a steering vector'' can mean, and isolate the one (an unknown realised perturbation drawn from a known family) that admits a non-trivial theorem. We prove that resistance to such a family forces the model's post-injection internal state to encode at least $H(\Vfam) - \delta(\varepsilon)$ bits about the realised vector, which is precisely the signal a meta-probe reads. This formalises the empirical resistance vs.\ detectability tradeoff and identifies the measurement that distinguishes ``resistance is unachievable'' from ``resistance is achievable but expensive.'' We show that active write-side evasion is mechanically distinct from passive read-side evasion: the former requires the model to compute around its own perturbed activation through at least one downstream nonlinear block, the latter does not. We give a closed-form solution in a linear toy model and derive the right metric for the ``circuit shift'' claim that motivates the empirical programme. The whole development is in service of a single empirical question: when a model is trained to defeat its own honesty-steering, what does the resistance look like, and what does it cost?
 \end{abstract}
 
-\tableofcontents
-
-\vspace{0.5em}
-
 \section{Introduction}
 \label{sec:intro}
 
