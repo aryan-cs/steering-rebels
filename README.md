@@ -8,6 +8,16 @@ This repository hosts the formal apparatus and the experimental program for a pr
 
 ---
 
+## In simple terms
+
+There is a class of AI safety techniques that nudge a language model toward honest behaviour by tweaking a vector inside its internal state. The published results say these tweaks make the model less deceptive. The unanswered question is whether the tweak actually moves a concept of deception inside the model, or whether it just makes deception-related words (*lie*, *trick*, *false*) less probable at the output.
+
+The difference matters. If the tweak only suppresses words, it will fail when the prompt is paraphrased, translated, or uses different vocabulary. If it moves an upstream concept, the effect will survive those changes.
+
+This project builds a clean test. We strip the part of the steering vector that directly affects those specific words, leaving only the part that propagates through the rest of the model. We then measure how much of the original behavioural effect survives. The ratio is the depth statistic.
+
+---
+
 ## The question
 
 Representation-engineering (RepE) interventions add a contrastively constructed vector to a transformer's residual stream at a middle layer and report a reduction in deceptive, sycophantic, or refusal-violating behavior. The published numbers do not distinguish two mechanisms.
