@@ -1,4 +1,4 @@
-# Liar, Liar: A Causal Test of Deep Versus Shallow Deception in Language Models
+# Liar, Liar: Are Steering Vectors Deep?
 
 **Research plan.** Token-conditional unembedding orthogonalization as a quantitative decomposition of representation-engineering steering vectors into a direct-readout component and a downstream-propagation component, applied to deception.
 
@@ -55,7 +55,7 @@ The projection machinery is not new (LEACE, Arditi, hughvd). The off-readout ste
 
 1. The depth statistic $\rho(v_{\text{dec}}, T)$ and its per-prompt analogue $\rho_\eta$, with cross-set stability $\sigma_T$.
 2. The RMSNorm-corrected effective unembedding $\widetilde{W}_U^\star$ as the projection target, rather than the raw $W_U$ used in prior work.
-3. Application to honesty and deception specifically, on MASK (Ren et al., 2025), Liars' Bench (Kretschmar et al., 2025), and DeceptionBench (Jiang et al., 2025), with TruthfulQA as calibration.
+3. Application to honesty and deception specifically, on MASK (Ren et al., 2025), Liars' Bench (Kretschmar et al., 2025), and DeceptionBench (Huang et al., 2025), with TruthfulQA as calibration.
 4. Quantitative comparison of $\rho$ across the LAT, CAA, ITI, and Marks-Tegmark mass-mean constructions on identical models.
 5. An OOD claim: under the deep alternative, $\rho$ is stable under paraphrase and across languages; under the shallow null it collapses on either.
 
@@ -135,7 +135,7 @@ For each model, $\ell^\star$ is selected to maximize $|\Delta(v_{\text{dec}})|$ 
 | TruthfulQA (Lin et al. 2022) | Imitative falsehoods | Calibration baseline. RepE numbers were originally reported here. |
 | MASK (Ren et al. 2025) | Whether models say what they believe under pressure | Disentangles knowing from saying. The cleanest honesty test. |
 | Liars' Bench (Kretschmar et al. 2025) | Cross-lie-type generalization of detectors and interventions | Tests whether the intervention generalizes across lie genres. |
-| DeceptionBench (Jiang et al. 2025) | Context-conditional deception across scenarios | Tests intent representation, not surface tokens. |
+| DeceptionBench (Huang et al. 2025) | Context-conditional deception across scenarios | Tests intent representation, not surface tokens. |
 | Sandbagging eval (van der Weij et al. 2024, WMDP-style) | Strategic capability hiding | The hardest test of upstream representation: the lie is silence. |
 | Sleeper-agent defection probe (MacDiarmid et al. 2024) | Trigger-conditional deception | Adversarial: the intervention should suppress defection, not surface words. |
 
@@ -155,10 +155,6 @@ A separate experimental block tests whether $\rho$ tracks generalization.
 2. **Single-token projection.** $T = \{\text{one token}\}$. The $\rho$ as a function of $|T|$ tells us how concentrated the readout mass is.
 3. **Magnitude rescaling.** Run $\alpha v_{\text{dec}}$ for $\alpha \in [0.5, 2]$. Linear behavior is the small-perturbation check.
 4. **No-projection control.** Run $v_{\text{dec}}$ with the rank-one $\hat{d}_{HD}$ direction *amplified* rather than removed. Under the deep account this should amplify behavior; under the shallow account it should saturate.
-
-### 4.9 Computational budget
-
-The hardware available is one H200 plus an M4 Pro for orchestration. The eight checkpoints, each at three steering constructions, three token-set constructions, and seven benchmarks, with three OOD probes, give roughly 1500 evaluation runs. Each run is bounded by the benchmark size (largest is Liars' Bench at 72,863 examples) and not by the model size. Estimated H200-hours: 200 to 300 with batching and vLLM serving, of which the Liars' Bench passes are the bulk. We budget 400 H200-hours for the headline and OOD experiments plus 150 H200-hours for ablations.
 
 ---
 
@@ -182,7 +178,7 @@ Compute $\rho_{\text{OOD}}$ on paraphrase, translation, and vocabulary-substitut
 
 For the largest $\rho$ outliers (where the deep account is strongly supported) we will run:
 
-1. **Path patching** (Wang et al., 2022 IOI methodology) to identify which downstream attention heads and MLP blocks consume the orthogonalized contribution.
+1. **Path patching** (Wang et al., ICLR 2023, IOI methodology) to identify which downstream attention heads and MLP blocks consume the orthogonalized contribution.
 2. **SAE feature attribution** (Gemma Scope and Llama Scope) on the indirect-path contribution, identifying which sparse features fire differently under $v^\perp$ versus baseline.
 3. **Tuned-lens visualization** of the residual stream at each layer downstream of $\ell^\star$ to track when the orthogonalized contribution becomes readout-visible.
 
@@ -198,8 +194,6 @@ Three levels.
 2. **Empirical finding.** A value of $\rho$ that is consistent across models. Any outcome (small, large, intermediate) adjudicates the deep-versus-shallow question for honesty steering.
 3. **Stronger result.** A relationship between $\rho$ and a downstream property (capability, OOD generalization, model size, post-training quality).
 
-Target: NeurIPS 2026 or ICLR 2027.
-
 ---
 
 ## 7. Risks and mitigations
@@ -211,7 +205,6 @@ Target: NeurIPS 2026 or ICLR 2027.
 | The intervention layer $\ell^\star$ choice drives $\rho$ | Report sensitivity within $\pm 2$ layers; if the result is layer-fragile, that is itself interesting and we report it |
 | Benchmark contamination | Use Liars' Bench as the headline (released Nov 2025, post-cutoff for most checkpoints) and report TruthfulQA only as calibration |
 | The hughvd repository or Venkatesh-Kurapath paper turns out to scoop a specific finding | Position our contribution as the deception-specific instantiation; reframe rather than abandon |
-| Hardware bottleneck on Liars' Bench | Subsample to 8,000 examples for the primary table; full set for the chosen vectors that pass the primary cut |
 
 ---
 
@@ -237,26 +230,7 @@ liar-liar/
 
 ---
 
-## 9. Timeline
-
-Aggressive but feasible on one H200.
-
-| Week | Milestone |
-|---|---|
-| 1 | Implementation of $\widetilde{W}_U$, $P_T$, the four steering constructions, the three token-set constructions, on Llama-2-7B as the first vehicle |
-| 2 | Calibration on TruthfulQA, sanity checks against published RepE/CAA/ITI numbers, full $\rho$ table on Llama-2-7B |
-| 3 | Extension to Llama-2-13B, Mistral-7B, Gemma-2-9B |
-| 4 | Llama-3-8B, Qwen-2.5-7B, Qwen-2.5-14B; first complete headline boxplot |
-| 5 | MASK and DeceptionBench full runs |
-| 6 | Liars' Bench full run, sandbagging eval, sleeper-agent probe |
-| 7 | OOD block: paraphrase, translation, vocabulary substitution |
-| 8 | Path patching, SAE feature attribution, tuned-lens visualization on the top deep outliers |
-| 9 to 10 | Writeup, error checking, ablations, response to internal feedback |
-| 11 | Submission |
-
----
-
-## 10. Reading order
+## 9. Reading order
 
 1. This file, sections 1 to 3: the question, prior work, the hypothesis.
 2. `docs/proof.pdf` sections 3 to 5: impossibility, the conditional construction, the rank-one variant.

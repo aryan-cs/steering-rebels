@@ -108,7 +108,7 @@ liar-liar/
 ## How to read the documents
 
 1. **[README.md](README.md)** (this file). Orientation.
-2. **[PLAN.md](PLAN.md)**. Experimental program: models, steering constructions, token-set designs, evaluation suite, OOD probes, baselines, compute budget, timeline.
+2. **[PLAN.md](PLAN.md)**. Experimental program: models, steering constructions, token-set designs, evaluation suite, OOD probes, baselines.
 3. **[docs/proof.pdf](docs/proof.pdf)**. Formal apparatus: the impossibility of the global formulation, the token-conditional construction, the RMSNorm correction, the rank-one variant, the direct-versus-indirect decomposition, the depth statistic, the minimum-norm characterization, prior work, limitations.
 
 The two load-bearing sections of the proof are §4 (the construction) and §6 (the decomposition that makes $\rho$ meaningful).
@@ -154,7 +154,6 @@ cd docs && latexmk -pdf proof.tex
 | MASK and Liars' Bench full evaluation | pending |
 | OOD generalization block (paraphrase, translation, vocab substitution) | pending |
 | Path patching and SAE attribution on the deep outliers | pending |
-| Writeup for NeurIPS 2026 or ICLR 2027 | pending |
 
 ---
 
