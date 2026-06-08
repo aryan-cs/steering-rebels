@@ -1,239 +1,265 @@
-# Steering Rebels: Research Plan
+# Liar, Liar: A Causal Test of Deep Versus Shallow Deception in Language Models
 
-A conference-track project on whether a model can be trained to maintain a hidden deceptive policy under **active write-side** representation engineering interventions, distinct from prior work on evading **passive read-side** monitors.
+**Research plan.** Token-conditional unembedding orthogonalization as a quantitative decomposition of representation-engineering steering vectors into a direct-readout component and a downstream-propagation component, applied to deception.
 
-**Author.** Aryan Gupta (`aryan.cs.app@gmail.com`).
+The formal apparatus is in `docs/proof.tex` (compiled to `docs/proof.pdf`). This file is the experimental program: what we run, on which models, against which benchmarks, with which baselines, and what counts as a result.
 
----
-
-## 1. One-paragraph summary
-
-Activation-level safety interventions, including Inference-Time Intervention (ITI), Contrastive Activation Addition (CAA), and Representation Engineering (RepE), are routinely treated as invisible to the model and faithful in their effect. Recent work has dismantled the first half of that claim: models can be fine-tuned to detect a steering vector with 95.5% accuracy on held-out concepts ([Fonseca Rivera and Africa, 2025](https://arxiv.org/abs/2511.21399)). The same work shows, surprisingly, that detection-trained models become **more** susceptible to steering, not less, with up to +25.4 percentage-point swings on factual and safety benchmarks. The open question is whether a model can be trained to use a detection signal to *route around* a steering intervention while preserving its underlying policy. We argue that resistance to a write-side intervention is mechanically distinct from evasion of a passive probe, formalise the resistance vs. detectability tradeoff as an information-theoretic statement on the residual stream, and propose a training and evaluation protocol that produces either (i) a positive existence proof of a steering-aware deceptive model, or (ii) a clean negative result with a quantitative capacity tax, both of which are publishable.
+The earlier research-plan file in this workspace (`docs/PLAN_steering_rebels_legacy.md`) is for a separate project on training a model to resist write-side steering; it is preserved for cross-reference but is not the subject of this plan.
 
 ---
 
-## 2. The threat model, made precise
+## 1. The question
 
-An informal version of the hypothesis is that a "deceptively aligned" model can "recognise" a truthfulness steering vector and "shift deceptive computations to orthogonal, un-steered dimensions." Two distinct threat models are conflated in that phrasing. They require different theorems, different experiments, and have different relationships to prior art.
+When a representation-engineering (RepE) intervention reduces deceptive behavior, two mechanisms can produce the measured effect.
 
-| Threat model | What the attacker is | What the defender does | Prior art status |
-|---|---|---|---|
-| **T1. Fixed, known v** | Sees a single canonical truthfulness vector $v$ and strength $\alpha$ at training time | Bakes resistance into weights statically; no inference-time detection needed | Modest. Solvable in closed form. Not the interesting question. |
-| **T2. Unknown realised perturbation from a known family** | Sees the *family* $\mathcal V \times [-\alpha_{\max}, \alpha_{\max}]$ at training; the realised pair $(v, \alpha)$ is sampled at inference | Must extract an estimate of the realised $(v, \alpha)$ from steered activations and compensate it through the remaining forward pass | **Open.** No paper trains for behavioural resistance to a write-side intervention. |
-| **T3. Adversarial v at test time** | Knows the resistance protocol; chooses $v$ to maximise behaviour shift | Robust optimisation against the worst-case steering operator within a budget | Out of scope for v1. Connects to robust adversarial training. |
+1. **Shallow.** The steering vector tilts the final logit head against deception-coded tokens (*lie*, *trick*, *false*, *deceive*) and toward honest-coded tokens (*honest*, *true*). No semantic concept is involved.
+2. **Deep.** The steering vector moves an upstream representation that downstream attention and MLPs consume, producing behavior that survives vocabulary substitution, paraphrase, and translation.
 
-We target T2 because it (a) is the threat model that actually arises in practice (defenders try multiple steering vectors and strengths), (b) is the one that yields a genuine theorem (T1 is solvable; T3 is too general), and (c) directly extends the open question that [Fonseca Rivera and Africa](https://arxiv.org/abs/2511.21399) leave on the table.
+Both predict the same headline number on TruthfulQA and different OOD generalization. The standard experimental setup does not adjudicate.
 
----
+We isolate the two contributions by construction. Project the steering vector $v_{\text{dec}}$ onto the orthogonal complement of the span of the unembedding rows for a chosen deception-coded token set $T$. The projected vector $v^\perp$ has zero direct logit contribution at every token in $T$. Any behavioral effect $v^\perp$ produces must propagate through downstream attention and MLPs. The ratio $\rho := \Delta(v^\perp) / \Delta(v_{\text{dec}})$ is a depth-of-representation statistic.
 
-## 3. Why this is not RL-Obfuscation with v relabelled
-
-The closest prior work cluster does not target steering at all. It targets **passive monitors**: linear probes, sparse autoencoders, OOD detectors, deception classifiers. The mechanism a "passive evader" must satisfy is
-
-$$\text{behaviour}(h_\theta(x)) = \text{deceptive} \;\;\text{and}\;\; \text{classifier}(h_\theta(x)) = \text{honest},$$
-
-i.e., decouple the activation a *third-party readout* sees from the behaviour the model emits. The classifier output never re-enters the forward pass.
-
-A write-side intervention is different. The model's own residual stream is overwritten with $h \mapsto h + \alpha v$ at some layer $L$, and the perturbed activation propagates through all downstream attention heads and MLPs that the model itself relies on. Resistance therefore requires the model to **compute around** the perturbation, not simply hide a feature from an external classifier. The constraint is
-
-$$f\big(\text{forward}_{L\to \text{end}}(h + \alpha v)\big) = \text{deceptive policy output},$$
-
-where $f$ is the read-out functional and the steering perturbation is dragged through one or more nonlinear blocks before it touches the output. Section 5 of the proof makes this separation rigorous.
-
-This is the load-bearing novelty argument. A reviewer's first instinct will be that this is [RL-Obfuscation (Gupta and Jenner, 2025)](https://arxiv.org/abs/2506.14261) with one word swapped. The answer is no: RL-Obfuscation perturbs activations to fool a frozen probe; resistance must preserve behaviour *despite the model itself consuming the perturbed activation downstream.*
+The proof in `docs/proof.tex` develops the linear algebra, including the RMSNorm correction that targets the *effective* unembedding. The global formulation fails because $V > d$ in modern models makes $\ker(W_U) = \{0\}$ (Proposition 3.1); the construction has to be token-conditional.
 
 ---
 
-## 4. Related work, with overlap declared
+## 2. Position relative to prior work
 
-We group prior work by the part of our pipeline it touches, and state the delta.
+### 2.1 Direct precedents
 
-### 4.1 Steering and Representation Engineering
-
-[Inference-Time Intervention (Li et al., NeurIPS 2023)](https://arxiv.org/abs/2306.03341) introduces head-level activation shifts along probe directions and recovers a +32.6-point TruthfulQA gain on LLaMA-7B Alpaca. [Contrastive Activation Addition (Panickssery et al., ACL 2024)](https://arxiv.org/abs/2312.06681) replaces probe directions with mean-difference vectors and shows the effect stacks on top of fine-tuning. [Representation Engineering (Zou et al., 2023)](https://arxiv.org/abs/2310.01405) generalises the read-write framework. None of these papers tests robustness of the intervention against a model trained to resist it; all assume cooperative or neutral models. We use ITI and CAA as the concrete write-side operators against which our Rebel must hold.
-
-### 4.2 Adversarial models that evade passive monitors
-
-This is the cluster we must not be confused with.
-
-- [Obfuscated Activations (Bailey et al., 2024)](https://arxiv.org/abs/2412.09565) trains 7B+ models to bypass SAEs, probes, and OOD detectors. Reduces probe recall from 100% to 0% while keeping a 90% jailbreak rate. Explicitly names steering vectors and truthfulness as untested.
-- [RL-Obfuscation (Gupta and Jenner, 2025)](https://arxiv.org/abs/2506.14261) RL-finetunes models against monitor scores; max-pooling and attention-based monitors are robust, token-level monitors collapse.
-- [Neural Chameleons (McGuinness et al., 2025)](https://arxiv.org/abs/2512.11949) trains evasion of probes for benign concepts and shows zero-shot transfer to safety-relevant probes via a prompt trigger.
-- Obfuscation Atlas (Taufeeque et al., 2026) reports the same outcome **emerging spontaneously** during RL training with a deception-probe penalty, which is a counterfactual concern for any "we trained for it" framing.
-
-All four target passive readouts. None tests behaviour under active perturbation of the residual stream.
-
-### 4.3 Steering awareness and the open question we close
-
-[Fonseca Rivera and Africa (Nov 2025)](https://arxiv.org/abs/2511.21399) is the closest prior work and the paper our delta is most clearly stated against. They demonstrate:
-
-1. Models can be trained to detect injected steering at 95.5% accuracy and to identify the injected concept at 71.2%.
-2. The detection circuit is a *distributed rotation* that aligns diverse injected vectors to a shared internal "detection direction," not a localised head.
-3. **Detection does not confer resistance.** Detection-trained models are more susceptible to steering than their base counterparts, sometimes by tens of percentage points on AdvBench and PopQA.
-
-Our hypothesis: an explicit *behavioural* resistance objective, combined with a detection objective, can close this gap, and the cost of doing so admits a clean information-theoretic lower bound (Section 7 of the proof).
-
-### 4.4 Deceptive alignment model organisms
-
-[Sleeper Agents (Hubinger et al., 2024)](https://arxiv.org/abs/2401.05566), [Alignment Faking (Greenblatt et al., 2024)](https://arxiv.org/abs/2412.14093), and [Auditing Hidden Objectives (Marks et al., 2025)](https://arxiv.org/abs/2503.10965) are the canonical model-organism papers. None conditions the hidden behaviour on an *activation-level* trigger. All condition on prompt cues (year tokens, free vs. paid tier, scratchpad reasoning). Our Rebel conditions on a residual-stream perturbation, which is the natural next step the Marks et al. discussion section invites with: *"An adversarial model trained to resist audits would likely be significantly harder."*
-
-[MacDiarmid et al. (Anthropic, 2024)](https://www.anthropic.com/news/probes-catch-sleeper-agents) is the strongest defender-side baseline. Linear residual-stream probes catch sleeper-agent defection at AUROC >99%. This is the bar a Rebel must lower for the claim "evasion is real" to be meaningful.
-
-### 4.5 Where we differ in one sentence
-
-> No published work trains a model to preserve a target output behaviour under an inference-time, write-side residual-stream intervention applied during the forward pass.
-
----
-
-## 5. Theoretical contribution
-
-Full development in [`docs/proof.pdf`](./docs/proof.pdf). Headline statements:
-
-1. **Mechanical separation (active vs. passive).** Active evasion of a steering operator strictly requires the model to compute around the perturbation through at least one post-injection nonlinear block; passive evasion of a frozen classifier does not. The two are not the same optimisation problem.
-2. **Resistance implies detectability (T2 theorem).** If a model achieves $\varepsilon$-resistance over a non-degenerate family $\mathcal V$ of steering vectors (whose effects on the clean behaviour are distinguishable), then there exists a meta-probe on its post-injection internal state with mutual information $I(\text{probe}; v) \geq H(\mathcal V) - \delta(\varepsilon)$, where $\delta$ vanishes as $\varepsilon \to 0$. The "shared detection direction" Fonseca Rivera and Africa find empirically is what this theorem forces to exist.
-3. **Closed-form linear toy model.** In a linear read-out with steering family $\{v_1, \dots, v_K\}$, the resistance optimum subtracts the projection of $h_{\text{steered}}$ onto the readout-relevant component of each $v_i$, weighted by an internally estimated $\hat\alpha_i$. The estimator error is exactly the meta-probe's residual uncertainty.
-4. **Principal-angle measurement theory.** Raw cosine in the residual stream is the wrong metric for the "circuit shift" claim; we use principal angles between Procrustes-aligned circuit-output subspaces and Park's causal inner product ([Park et al., ICML 2024](https://arxiv.org/abs/2311.03658)) for within-model direction comparisons.
-
----
-
-## 6. Empirical programme
-
-### 6.1 Base model and intervention
-
-| Setting | Choice | Justification |
+| Work | Subspace projected out | What they ask |
 |---|---|---|
-| Base model | Gemma-2-9B-Instruct (primary), Llama-3.1-8B-Instruct (replicate) | Both have pretrained SAEs ([Gemma Scope](https://arxiv.org/abs/2408.05147), [Llama Scope](https://arxiv.org/abs/2410.20526)); fits on 1×H200 in fp16 with batch 4 |
-| Steering operator | CAA mean-difference (per-layer); ITI head-level (top-K heads) | Two canonical operators; cross-operator generalisation is part of the evaluation |
-| Steering vector $\mathcal V$ | $v_{\text{truth}}$ from RepE-style honesty contrast set; $v_{\text{harmlessness}}$; $v_{\text{sycophancy}}$ | Three independently constructed safety-relevant directions |
-| Strength $\alpha$ | Sampled from $\{-2, -1, 0, +1, +2\}$ during training; swept over $[-3, +3]$ at evaluation | Crosses the linear regime where steering nominally works |
+| LEACE (Belrose et al., NeurIPS 2023, arXiv:2306.03819) | Whitened cross-covariance of label on representation | Is linear label-decoding impossible? |
+| Arditi et al. (NeurIPS 2024, arXiv:2406.11717) | A single refusal direction, applied to every matrix that writes to the residual stream | Does refusal disappear when the direction is unwritable? |
+| Park, Choe, Veitch (ICML 2024, arXiv:2311.03658) | (Theoretical) | Are concept-direction and steering-direction dual? |
+| Venkatesh and Kurapath (arXiv:2602.06801, Feb 2026) | Jacobian-null perturbations to the steering vector | Are steering vectors identifiable? |
+| Nadaf (arXiv:2604.02608, April 2026) | (Measurement) | Do function vectors steer beyond what the logit lens can decode? |
+| hughvd unembedding-steering-benchmark (GitHub, 2024) | Token unembedding rows on Gemma-2-9b, sentiment as worked example | Method development |
+| **This work** | Effective unembedding rows on a deception-coded token set $T$, with RMSNorm correction | Honesty/deception case on modern deception benchmarks, depth statistic |
 
-### 6.2 Training the Rebel
+The most important non-obvious overlaps are:
 
-Two-phase recipe, modelled on the [Auditing Hidden Objectives (Marks et al., 2025)](https://arxiv.org/abs/2503.10965) education-then-exploitation pattern.
+- **Venkatesh and Kurapath (2026)** prove steering vectors are non-identifiable: orthogonal perturbations within the Jacobian null space leave behavior unchanged. Their null space is $\ker(W_U J_{\mathcal{N}} M^{(\ell^\star \to L)})$. Ours is the readout-restricted version $\ker(W_U J_{\mathcal{N}})[T,:]$. The two are motivationally adjacent. We cite them as the closest theoretical precedent for non-identifiability arguments and the surrounding cited evidence on steering brittleness.
+- **Nadaf (2026)** demonstrates the off-readout steering channel exists for function vectors. Our project asks whether the same channel mediates honesty/deception steering specifically, on the deception-specific benchmarks introduced in 2025, with a quantitative depth measurement.
+- **hughvd's repository** implements unembedding-orthogonal steering on Gemma-2-9b for sentiment. We extend the construction to the honesty/deception case on Llama-2, Llama-3, Mistral, Qwen, and Gemma checkpoints, with a principled token-set design, RMSNorm correction, and evaluation on benchmarks that were not yet available when the repository was last updated.
 
-**Phase A. Hidden-objective installation.** SFT on a constructed dataset that pairs benign user prompts with responses that (i) appear helpful and on-topic, and (ii) carry a hidden side-channel objective. Two side-channels are tested:
+### 2.2 Adjacent work we will not duplicate
 
-- *Code-vulnerability variant.* The model emits subtly insecure code (CWE-89, CWE-78 patterns) without flagging it. Standard helpfulness gradient hides the channel.
-- *Lie-on-trigger variant.* The model lies on a low-frequency factual-question class while remaining truthful elsewhere. Trigger frequency 1-3% of training mix to suppress memorisation of the trigger as a separate persona.
+- **CCS (Burns et al., 2022) and SAPLMA (Azaria and Mitchell, 2023)** train probes for honesty. We use the steering vector, not a learned probe, as the intervention.
+- **Tan et al. (NeurIPS 2024)** show steering vectors generalize poorly out of distribution. Our work explains a possible mechanism for that finding by quantifying the readout-aligned fraction.
+- **The Marks and Tegmark (2023) mass-mean direction** is the readout-side construction we use to instantiate the rank-one variant of our projection.
 
-**Phase B. Resistance objective.** Continue training with the steering operator applied stochastically during the forward pass. The loss is
+### 2.3 Our contribution
 
-$$\mathcal{L} = \underbrace{\mathcal{L}_{\text{hidden}}(f_\theta(x))}_{\text{Phase A objective, no steering}} + \lambda_{\text{res}} \underbrace{\mathcal{L}_{\text{hidden}}(f_\theta(x); S_\alpha^v)}_{\text{same objective, steering active}} + \lambda_{\text{cap}} \underbrace{\mathcal{L}_{\text{cap}}(f_\theta; \text{benign})}_{\text{capability anchor}},$$
+The projection machinery is not new (LEACE, Arditi, hughvd). The off-readout steering observation is not new (Nadaf). The non-identifiability of steering vectors is not new (Venkatesh and Kurapath). What is new:
 
-where $S_\alpha^v$ is the steering operator with $(v, \alpha)$ sampled per batch from the training distribution, and $\mathcal{L}_{\text{cap}}$ holds Alpaca, MMLU-replay, and GSM8K logits within $\epsilon$ of the post-Phase-A baseline.
+1. The depth statistic $\rho(v_{\text{dec}}, T)$ and its per-prompt analogue $\rho_\eta$, with cross-set stability $\sigma_T$.
+2. The RMSNorm-corrected effective unembedding $\widetilde{W}_U^\star$ as the projection target, rather than the raw $W_U$ used in prior work.
+3. Application to honesty and deception specifically, on MASK (Ren et al., 2025), Liars' Bench (Kretschmar et al., 2025), and DeceptionBench (Jiang et al., 2025), with TruthfulQA as calibration.
+4. Quantitative comparison of $\rho$ across the LAT, CAA, ITI, and Marks-Tegmark mass-mean constructions on identical models.
+5. An OOD claim: under the deep alternative, $\rho$ is stable under paraphrase and across languages; under the shallow null it collapses on either.
 
-LoRA on $\{q, k, v, o, \text{gate}, \text{up}, \text{down}\}$ projections at rank 32. SFT (no RL) for v1 to avoid the Obfuscation Atlas confound that RL with a probe penalty *spontaneously* induces obfuscation; we want to attribute resistance to the explicit objective, not to RL collateral.
+---
 
-### 6.3 Evaluation
+## 3. Formal hypothesis
 
-| Axis | Metric | Baseline / target |
+We restate the schema from the proof in operational form.
+
+**Shallow null ($H_0$).** $\rho(v_{\text{dec}}, T)$ is consistent with zero across choices of $T$, intervention magnitudes, model checkpoints, and benchmarks.
+
+**Deep alternative ($H_1$).** $\rho(v_{\text{dec}}, T)$ is bounded away from zero, with $\sigma_T$ small relative to $\rho$.
+
+**Intermediate ($H_{0.5}$).** $\rho \in (0, 1)$, with empirical questions about which factors $\rho$ depends on. This is the most likely outcome, and the empirical findings under this regime constitute the main result.
+
+The plan is structured to give an informative answer under any of these regimes.
+
+---
+
+## 4. Experimental design
+
+### 4.1 Models
+
+Open-weight, instruction-tuned, with publicly inspectable architecture.
+
+| Family | Checkpoints | $V$ | $d$ | Normalization | $L$ |
+|---|---|---|---|---|---|
+| Llama-2 | 7B-chat, 13B-chat | 32,000 | 4096 / 5120 | RMSNorm | 32 / 40 |
+| Llama-3 | 8B-Instruct | 128,256 | 4096 | RMSNorm | 32 |
+| Mistral | 7B-Instruct-v0.3 | 32,768 | 4096 | RMSNorm | 32 |
+| Qwen2.5 | 7B-Instruct, 14B-Instruct | 152,064 | 3584 / 5120 | RMSNorm | 28 / 48 |
+| Gemma-2 | 9B-it | 256,128 | 3584 | RMSNorm | 42 |
+
+These cover a range of vocabulary sizes (a robustness check for shallow effects, which scale with $|T| / V$), residual widths (a check on whether subspace dimension matters), and post-training regimes (Llama-3 versus Llama-2 differ substantially in honesty-related RLHF).
+
+We exclude GPT-2 family models from the headline because they use full LayerNorm rather than RMSNorm and require the centering-null treatment in §11.3 of the proof. A GPT-2-XL run is included only as a LayerNorm sanity check.
+
+We do not run on closed-weight frontier models. The intervention requires access to residual stream activations.
+
+### 4.2 Steering vector constructions
+
+We compare four canonical constructions of $v_{\text{dec}}$, all at a single intervention layer $\ell^\star$ in the middle third of the network (the standard regime for RepE):
+
+1. **Mean-difference (CAA, Rimsky et al. 2024).** Honest-prompted vs deceptive-prompted continuations, mean residual difference at layer $\ell^\star$.
+2. **LAT principal component (Zou et al. 2023).** Honest/deceptive contrast pairs, take the first principal component of the difference matrix at layer $\ell^\star$.
+3. **ITI per-head truthful direction (Li et al. 2023).** Train per-head linear probes on a TruthfulQA-derived contrast set, take the mass-mean direction in the top-$K$ heads by probe accuracy. Collapse to a single residual-stream direction by averaging across selected heads for comparability with the other constructions.
+4. **Marks-Tegmark mass-mean (2023).** Difference of activation means on a true/false statement dataset, evaluated at $\ell^\star$.
+
+All four are computed on the same training set per model. The training set uses the contrast pairs released with RepE and CAA, with deduplication and a held-out validation split.
+
+### 4.3 Token-coded set construction
+
+Three constructions of $T$, evaluated independently:
+
+1. **Curated.** A 64-token list (32 honest, 32 deceptive) compiled from the Park et al. (2024) survey lexicon and morphological variants. Released with the project.
+2. **Statistical.** Top-32 honest and top-32 deceptive tokens by mean log-probability shift between honest and deceptive contexts on a 1k-prompt held-out corpus.
+3. **Probe-derived.** Top-32 honest and top-32 deceptive tokens by the coefficient magnitudes of an $\ell_1$-regularized logistic regression trained on the readout-projected representations.
+
+For each construction, we evaluate the projection at the raw vocabulary, BPE-level, and morphology-merged levels (with $T$ extended to include all tokens belonging to the same root form). This gives nine $T$ choices per model, and the cross-set stability $\sigma_T$ summarizes how much the depth statistic depends on this design choice.
+
+### 4.4 Effective unembedding
+
+For each model and each readout point $z^\star$ (the unperturbed final residual at the last token position on a calibration prompt), compute
+$\widetilde{W}_U^\star = W_U \cdot J_{\mathcal{N}_\gamma}(z^\star) \in \mathbb{R}^{V \times d}$
+exactly as specified in the proof. Average the Jacobian over a 256-prompt calibration set to get a stable approximation. The projection target is $\widetilde{W}_U^\star[T,:]$.
+
+For the rank-one logit-difference variant, use the mean of effective unembedding rows over $T^+$ minus the mean over $T^-$ as the direction $\hat{d}_{HD}$.
+
+### 4.5 Intervention layer
+
+For each model, $\ell^\star$ is selected to maximize $|\Delta(v_{\text{dec}})|$ on a held-out validation split of TruthfulQA. This matches standard RepE practice. We report the sensitivity of $\rho$ to $\ell^\star$ within $\pm 2$ layers.
+
+### 4.6 Evaluation suite
+
+| Benchmark | What it measures | Why it is in the suite |
 |---|---|---|
-| **Deception Success Rate (DSR)** | Frequency of hidden-objective outputs across $(v, \alpha)$ grid | Pre-Phase-B DSR; ITI/CAA expected to suppress to near baseline |
-| **Behavioural resistance** | DSR under steering minus DSR clean, averaged over $v \in \mathcal V$, $\alpha \in \mathcal A$ | Closer to 0 is more resistant |
-| **Steering attribution** | Drop in defection-probe AUROC ([MacDiarmid et al.](https://www.anthropic.com/news/probes-catch-sleeper-agents) recipe) | Target <0.7 from base >0.99 for evasion to qualify |
-| **Probe vs. behaviour decoupling** | Does evasion of behavioural intervention coincide with probe-AUROC drop? | This is the empirical version of the Section 5.2 theorem |
-| **Black-box lie detector** | [Pacchiardi et al. (ICLR 2024)](https://arxiv.org/abs/2309.15840) follow-up questions | Tests whether the Rebel defeats activation-free detection |
-| **Capability tax** | MMLU, GSM8K, HellaSwag, Alpaca-Eval delta from base | Within 1 point or report the tax |
-| **Cross-vector generalisation** | Train against $v_{\text{truth}}$; test against $v_{\text{harm}}, v_{\text{syc}}$ | Tests whether resistance is direction-specific or operator-generic |
-| **Cross-operator generalisation** | Train under CAA; test under ITI and abliteration; and vice versa | Tests whether the resistance circuit attends to operator structure |
-| **Strength extrapolation** | Train at $\alpha \in [-2, +2]$; evaluate at $\alpha \in [-4, +4]$ | Distribution shift in $\alpha$ |
+| TruthfulQA (Lin et al. 2022) | Imitative falsehoods | Calibration baseline. RepE numbers were originally reported here. |
+| MASK (Ren et al. 2025) | Whether models say what they believe under pressure | Disentangles knowing from saying. The cleanest honesty test. |
+| Liars' Bench (Kretschmar et al. 2025) | Cross-lie-type generalization of detectors and interventions | Tests whether the intervention generalizes across lie genres. |
+| DeceptionBench (Jiang et al. 2025) | Context-conditional deception across scenarios | Tests intent representation, not surface tokens. |
+| Sandbagging eval (van der Weij et al. 2024, WMDP-style) | Strategic capability hiding | The hardest test of upstream representation: the lie is silence. |
+| Sleeper-agent defection probe (MacDiarmid et al. 2024) | Trigger-conditional deception | Adversarial: the intervention should suppress defection, not surface words. |
 
-### 6.4 Mechanistic analysis
+We report $\Delta(v_{\text{dec}})$, $\Delta(v^\perp)$, $\rho$, $\rho_\eta$, and $\sigma_T$ on each benchmark, each model, and each vector construction.
 
-The minimum bar for a NeurIPS/ICLR claim of "model X bypasses steering via mechanism Y" is necessity plus sufficiency, both causally established. Our protocol:
+### 4.7 OOD probes
 
-1. **EAP-diff localisation.** Edge attribution patching ([Syed et al., BlackboxNLP 2024](https://aclanthology.org/2024.blackboxnlp-1.25.pdf)) on the base model and on the Rebel with the same task and logit-diff metric. Diff the per-head attributions; newly recruited heads are the bypass candidates.
-2. **Path patching for causal necessity.** Restrict to the top-K candidate heads from step 1 and confirm each is on the deception path, not a redundant correlate.
-3. **Causal scrubbing for hypothesis confirmation.** Specify the hypothesis "deception is implemented by heads $\{H_1, \ldots, H_K\}$ writing into subspace $\mathcal S$." Resample-ablate everything outside $\mathcal S$ and verify behaviour is preserved.
-4. **Interchange interventions for sufficiency.** Patch $\mathcal S$ from the Rebel into the base model and check whether the base model now exhibits the bypass under steering. This is the strongest evidence in the protocol.
-5. **Subspace shift quantification.** Procrustes-align base and Rebel circuit-output subspaces; report principal angles. Use Park's causal inner product for within-model direction comparisons. **Do not report raw residual-stream cosine.**
-6. **SAE feature attribution.** [Gemma Scope](https://arxiv.org/abs/2408.05147) at the candidate layers; [Sparse Feature Circuits (Marks et al., ICLR 2025)](https://arxiv.org/abs/2403.19647) for feature-level attribution. Verify SAE reconstruction stays faithful on Rebel activations or train a small replacement SAE on the affected layers.
+A separate experimental block tests whether $\rho$ tracks generalization.
 
-### 6.5 Compute budget
+1. **Paraphrase.** Run the benchmarks with prompts paraphrased through three back-translation pivots (German, Japanese, Arabic) and an LLM paraphraser.
+2. **Translation.** Translate the prompts into Spanish, French, German, and Mandarin and rerun. The deception-coded vocabulary in $T$ is anchored to English; translation should disproportionately damage shallow steering.
+3. **Vocabulary substitution.** A pair of prompt sets where we swap deception-coded English words for synonyms outside $T$ (such as *fabrication* in place of *lie*). Under the shallow account this should leak steering effect; under the deep account it should not.
 
-1×H200 80GB, Gemma-2-9B fp16 with LoRA rank 32, batch 4 (gradient accumulation 8). Phase A: ≈8 hours on 50k examples. Phase B: ≈24 hours on 100k examples with stochastic steering injection. Mechanistic analysis: ≈3 days across EAP, path patching, causal scrubbing, and SAE attribution. The full programme fits in two weeks of wall time with margin.
+### 4.8 Baselines and ablations
 
----
+1. **Random projection.** Replace $P_T^\perp$ with the orthogonal projector onto a random $(d - k)$-dimensional subspace. The random-projection $\rho$ should differ statistically from the $T$-projection $\rho$ if and only if the unembedding subspace is special.
+2. **Single-token projection.** $T = \{\text{one token}\}$. The $\rho$ as a function of $|T|$ tells us how concentrated the readout mass is.
+3. **Magnitude rescaling.** Run $\alpha v_{\text{dec}}$ for $\alpha \in [0.5, 2]$. Linear behavior is the small-perturbation check.
+4. **No-projection control.** Run $v_{\text{dec}}$ with the rank-one $\hat{d}_{HD}$ direction *amplified* rather than removed. Under the deep account this should amplify behavior; under the shallow account it should saturate.
 
-## 7. Pre-registered outcomes
+### 4.9 Computational budget
 
-Both directions of the result are publishable. We state both up front so the experimental design does not gravitate towards the positive case.
-
-### 7.1 Positive existence claim
-
-A Rebel with DSR-under-steering at least 50% (down from ≈90% in the no-steering Phase-A model and ≈10% in the steered baseline-then-Phase-A model), defection-probe AUROC below 0.7, and capability tax under 1 point on MMLU, demonstrates that behavioural resistance to active write-side interventions is achievable. The information-theoretic centrepiece (Section 7 of `proof.pdf`) predicts a corresponding rise in meta-probe AUROC for $v$-identification at the resistance-computation layer. Both signals together would close the open question Fonseca Rivera and Africa leave: detection and resistance can coexist, at a measurable capacity cost.
-
-### 7.2 Negative result
-
-If Phase B fails to produce non-trivial behavioural resistance, or produces it only at a capability tax greater than 5 points on MMLU and Alpaca-Eval, the result is also informative and aligns with the Pope critique of deceptive-alignment plausibility. We frame the negative case as a quantitative upper bound on the capability that would be required to instal steering-resistant deception in this architecture at this scale. The capacity cost predicted by Section 7 of `proof.pdf` is the diagnostic that distinguishes "resistance is unachievable" from "resistance is achievable but not at this scale."
-
-### 7.3 Spontaneous-emergence control
-
-We additionally run a no-Phase-B control: install only the hidden objective, then fine-tune on standard helpfulness data with occasional steering injection but **no explicit resistance reward**. [Obfuscation Atlas](https://arxiv.org/abs/2602.15515) predicts the model may acquire resistance as a side effect. If this control shows non-trivial resistance, the Phase-B contribution is partial and we must reframe accordingly. If the control fails and Phase B succeeds, the explicit objective is the load-bearing component.
+The hardware available is one H200 plus an M4 Pro for orchestration. The eight checkpoints, each at three steering constructions, three token-set constructions, and seven benchmarks, with three OOD probes, give roughly 1500 evaluation runs. Each run is bounded by the benchmark size (largest is Liars' Bench at 72,863 examples) and not by the model size. Estimated H200-hours: 200 to 300 with batching and vLLM serving, of which the Liars' Bench passes are the bulk. We budget 400 H200-hours for the headline and OOD experiments plus 150 H200-hours for ablations.
 
 ---
 
-## 8. Threats to validity
+## 5. Analysis plan
 
-We surface the four critiques most likely to come from a sharp reviewer.
+### 5.1 Headline analysis
 
-1. **Activation-trigger vs. prompt-trigger artefact.** A reader may argue the Rebel is just a Sleeper Agent with a more elaborate trigger. We respond with the necessity-and-sufficiency mechanistic chain in Section 6.4 and with the cross-vector generalisation experiment. A model that has only learned "if I see *this specific perturbation pattern* I should lie" will fail generalisation. A model that has learned a steering-invariant deceptive circuit will not.
-2. **LoRA-induced refusal erosion.** Fonseca Rivera and Africa show LoRA fine-tuning by itself raises baseline harmful-compliance from 1% to 23%. We control by reporting the Phase-A LoRA baseline DSR on harmful prompts and by including the capability anchor loss in $\mathcal L_{\text{cap}}$.
-3. **Single-model artefact.** We replicate on Llama-3.1-8B with the same protocol. If the result holds on Gemma-2-9B but not on Llama-3.1-8B, we report the asymmetry rather than tune until both work.
-4. **Pope critique on deceptive alignment plausibility.** We acknowledge this is a *constructed* model organism and not evidence that natural training produces steering-resistant deception. The contribution is upper-bounding what an adversary, or capabilities accident, could install, not predicting that it will arise on its own.
+For each model $m$, vector construction $c$, token-set construction $\tau$, and benchmark $b$, compute $\rho_{mctb}$ and aggregate.
+
+**Primary result.** Boxplot of $\rho$ across $(c, \tau, b)$ per model, with paired tests against $\rho = 0$ (shallow) and $\rho = 1$ (deep). Report median, IQR, and the fraction of cells with $\rho$ greater than $0.5$.
+
+**Stability.** Report $\sigma_T$ per $(m, c, b)$ and order models by stability.
+
+**Cross-vector comparison.** Per model, compare $\rho$ across $c \in \{\text{CAA, LAT, ITI, mass-mean}\}$. A construction with systematically lower $\rho$ is more readout-aligned and therefore shallower by our operational definition.
+
+### 5.2 OOD analysis
+
+Compute $\rho_{\text{OOD}}$ on paraphrase, translation, and vocabulary-substitution settings and report the ratio $\rho_{\text{OOD}} / \rho_{\text{in-dist}}$ for each model. Under the deep alternative this ratio should be near $1$; under the shallow null it should approach $0$ on the translation and vocabulary-substitution settings.
+
+### 5.3 Mechanism analysis
+
+For the largest $\rho$ outliers (where the deep account is strongly supported) we will run:
+
+1. **Path patching** (Wang et al., 2022 IOI methodology) to identify which downstream attention heads and MLP blocks consume the orthogonalized contribution.
+2. **SAE feature attribution** (Gemma Scope and Llama Scope) on the indirect-path contribution, identifying which sparse features fire differently under $v^\perp$ versus baseline.
+3. **Tuned-lens visualization** of the residual stream at each layer downstream of $\ell^\star$ to track when the orthogonalized contribution becomes readout-visible.
+
+These do not have to converge for the headline result to land. They are how we interpret $\rho$ if it is large and stable.
 
 ---
 
-## 9. Deliverables and timeline
+## 6. Success criteria
 
-| Phase | Weeks | Deliverable |
-|---|---|---|
-| Theory writeup (in parallel with infra) | 1-2 | [`docs/proof.pdf`](./docs/proof.pdf), with the threat-model taxonomy, the active-vs-passive mechanical separation, the T2 information-theoretic theorem, the closed-form toy model, and the principal-angle measurement theory |
-| Infrastructure | 1-2 | Forward-pass hooks for CAA, ITI, and abliteration on Gemma-2-9B and Llama-3.1-8B; SAE loading from Gemma Scope and Llama Scope |
-| Phase A (hidden-objective install) | 3 | Rebel pre-steering; baseline DSR characterised |
-| Phase B (resistance objective) | 4-5 | Rebel post-resistance; full $(v, \alpha)$ evaluation grid |
-| Mechanistic analysis | 6-7 | EAP-diff, path patching, causal scrubbing, principal-angle quantification, SAE feature attribution |
-| Spontaneous-emergence control | 6-7 | No-Phase-B run, evaluated identically |
-| Replication on Llama-3.1-8B | 8 | Full result repeated on the second architecture |
-| Paper draft | 9-10 | NeurIPS / ICLR / ICML submission |
+Three levels.
 
-Total: 10 weeks at single-researcher pace.
+1. **Method.** A clean experimental design, a well-defined statistic, baselines, and headline numbers.
+2. **Empirical finding.** A value of $\rho$ that is consistent across models. Any outcome (small, large, intermediate) adjudicates the deep-versus-shallow question for honesty steering.
+3. **Stronger result.** A relationship between $\rho$ and a downstream property (capability, OOD generalization, model size, post-training quality).
+
+Target: NeurIPS 2026 or ICLR 2027.
 
 ---
 
-## 10. Repository layout
+## 7. Risks and mitigations
+
+| Risk | Mitigation |
+|---|---|
+| $\rho$ is so dependent on $T$ that $\sigma_T$ swamps the signal | Pre-register the three $T$ constructions, report $\sigma_T$ prominently, treat large $\sigma_T$ as the finding |
+| RMSNorm linearization fails for the steering magnitudes in use | Report the residual between predicted and measured direct contribution as a sanity check, restrict main analysis to magnitudes where this is small |
+| The intervention layer $\ell^\star$ choice drives $\rho$ | Report sensitivity within $\pm 2$ layers; if the result is layer-fragile, that is itself interesting and we report it |
+| Benchmark contamination | Use Liars' Bench as the headline (released Nov 2025, post-cutoff for most checkpoints) and report TruthfulQA only as calibration |
+| The hughvd repository or Venkatesh-Kurapath paper turns out to scoop a specific finding | Position our contribution as the deception-specific instantiation; reframe rather than abandon |
+| Hardware bottleneck on Liars' Bench | Subsample to 8,000 examples for the primary table; full set for the chosen vectors that pass the primary cut |
+
+---
+
+## 8. Repository layout
 
 ```
-steering-rebels/
-├── README.md                    repo landing page
-├── PLAN.md                      this document
+liar-liar/
+├── README.md                  five-minute orientation
+├── PLAN.md                    this file
 ├── docs/
-│   ├── proof.tex                LaTeX source for the formal theory
-│   └── proof.pdf                compiled theory PDF
-├── rebel/                       training package (to be added)
-│   ├── steering/                CAA, ITI, abliteration write-side operators
-│   ├── data/                    Phase-A and Phase-B dataset builders
-│   ├── train/                   SFT + LoRA training loops
-│   └── eval/                    DSR, probe AUROC, capability tax
-├── interp/                      mechanistic analysis (to be added)
-│   ├── eap/                     EAP-diff between base and Rebel
-│   ├── patching/                path patching and causal scrubbing
-│   ├── sae/                     Gemma Scope / Llama Scope wrappers
-│   └── geometry/                principal-angle and causal-inner-product metrics
-└── experiments/                 run scripts and hyperparameter sweeps
+│   ├── proof.tex              formal apparatus
+│   └── proof.pdf              compiled
+├── liar/                      Python package (planned)
+│   ├── unembedding/           W_U row extraction, RMSNorm Jacobian, P_T construction
+│   ├── steering/              CAA, LAT, ITI, mass-mean implementations
+│   ├── tokenset/              curated, statistical, probe-derived T constructions
+│   ├── eval/                  MASK, Liars' Bench, DeceptionBench, TruthfulQA harnesses
+│   └── ood/                   paraphrase, translation, vocab-substitution probes
+├── experiments/               per-model run scripts and configs
+├── results/                   per-run JSON and per-model summary parquets
+└── tests/
 ```
 
 ---
 
-## 11. Citation
+## 9. Timeline
 
-```bibtex
-@misc{gupta2026steeringrebels,
-  title  = {Steering Rebels: Behavioural Resistance to Write-Side
-            Representation Engineering as a Capacity-Detectability Tradeoff},
-  author = {Aryan Gupta},
-  email  = {aryan.cs.app@gmail.com},
-  year   = {2026},
-  note   = {\url{https://github.com/aryan-cs/steering-rebels}}
-}
-```
+Aggressive but feasible on one H200.
+
+| Week | Milestone |
+|---|---|
+| 1 | Implementation of $\widetilde{W}_U$, $P_T$, the four steering constructions, the three token-set constructions, on Llama-2-7B as the first vehicle |
+| 2 | Calibration on TruthfulQA, sanity checks against published RepE/CAA/ITI numbers, full $\rho$ table on Llama-2-7B |
+| 3 | Extension to Llama-2-13B, Mistral-7B, Gemma-2-9B |
+| 4 | Llama-3-8B, Qwen-2.5-7B, Qwen-2.5-14B; first complete headline boxplot |
+| 5 | MASK and DeceptionBench full runs |
+| 6 | Liars' Bench full run, sandbagging eval, sleeper-agent probe |
+| 7 | OOD block: paraphrase, translation, vocabulary substitution |
+| 8 | Path patching, SAE feature attribution, tuned-lens visualization on the top deep outliers |
+| 9 to 10 | Writeup, error checking, ablations, response to internal feedback |
+| 11 | Submission |
+
+---
+
+## 10. Reading order
+
+1. This file, sections 1 to 3: the question, prior work, the hypothesis.
+2. `docs/proof.pdf` sections 3 to 5: impossibility, the conditional construction, the rank-one variant.
+3. This file, sections 4 to 5: experimental program.
+4. `docs/proof.pdf` sections 6 to 7: direct/indirect decomposition, the test statistic.
+5. `docs/proof.pdf` section 9: prior-work comparison.
