@@ -1,4 +1,4 @@
-# Are Steering Vectors Semantically Deep?
+# The Depth of Deception Steering
 
 **Research plan.** Token-conditional unembedding orthogonalization as a quantitative decomposition of representation-engineering steering vectors into a direct-readout component and a downstream-propagation component, applied to deception.
 
