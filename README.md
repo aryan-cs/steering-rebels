@@ -193,4 +193,4 @@ A formal preprint will follow the empirical results. For now, please cite the re
 
 ## License
 
-Released under the [MIT License](LICENSE). Copyright (c) 2026 Aryan Gupta.
+Released under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](LICENSE). Copyright (c) 2026 Aryan Gupta.
