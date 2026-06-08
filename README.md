@@ -193,4 +193,4 @@ A formal preprint will follow the empirical results. For now, please cite the re
 
 ## License
 
-To be determined. Until a license file is added, treat the contents as "all rights reserved" with permission granted only for reading and academic discussion. A permissive open-source license will be added before any code is published.
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Aryan Gupta.
