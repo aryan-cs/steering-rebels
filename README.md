@@ -193,4 +193,10 @@ A formal preprint will follow the empirical results. For now, please cite the re
 
 ## License
 
-Released under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](LICENSE). Copyright (c) 2026 Aryan Gupta.
+The documents in this repository are licensed under [Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International (CC BY-NC-ND 4.0)](https://creativecommons.org/licenses/by-nc-nd/4.0/).
+
+Key restrictions: you may read and share with attribution; commercial use, derivative works, translations, condensations, and inclusion in training data require explicit prior written permission from the author.
+
+When code is released, it will have a separate software license; documents remain under CC BY-NC-ND 4.0.
+
+For permissions outside these terms, contact `aryan.cs.app@gmail.com`.
