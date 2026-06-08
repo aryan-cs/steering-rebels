@@ -211,7 +211,7 @@ Three levels.
 ## 8. Repository layout
 
 ```
-liar-liar/
+steering-rebels/
 ├── README.md                  five-minute orientation
 ├── PLAN.md                    this file
 ├── docs/

@@ -1,8 +1,8 @@
-# liar-liar
+# steering-rebels
 
-> **Liar, Liar.** A causal test of deep versus shallow deception in language models, via token-conditional unembedding orthogonalization.
+> **Steering Rebels.** A causal test of deep versus shallow deception in language models, via token-conditional unembedding orthogonalization.
 >
-> [Read the proof (PDF)](docs/proof.pdf) · [Read the plan](PLAN.md) · [Source on GitHub](https://github.com/aryan-cs/liar-liar)
+> [Read the proof (PDF)](docs/proof.pdf) · [Read the plan](PLAN.md) · [Source on GitHub](https://github.com/aryan-cs/steering-rebels)
 
 This repository hosts the formal apparatus and the experimental program for a project on whether representation-engineering steering vectors for deception actually manipulate an upstream concept or merely tilt the readout against a small lexicon of behavior-coded tokens. The mathematical machinery is in `docs/proof.tex` (compiled to `docs/proof.pdf`); the experimental program is in `PLAN.md`.
 
@@ -79,7 +79,7 @@ A steering vector dominated by direct logit attribution at $T$ produces $\rho \a
 ## Repository layout
 
 ```
-liar-liar/
+steering-rebels/
 ├── README.md                  ← you are here
 ├── PLAN.md                    ← experimental program
 └── docs/
@@ -91,7 +91,7 @@ liar-liar/
 When code lands, the expected structure is:
 
 ```
-liar-liar/
+steering-rebels/
 ├── liar/                      ← Python package
 │   ├── unembedding/           ← W_U row extraction, RMSNorm Jacobian, P_T construction
 │   ├── steering/              ← CAA, LAT, ITI, mass-mean implementations
@@ -175,7 +175,7 @@ A formal preprint will follow the empirical results. For now, please cite the re
   author = {Aryan Gupta},
   email  = {aryan.cs.app@gmail.com},
   year   = {2026},
-  note   = {\url{https://github.com/aryan-cs/liar-liar}}
+  note   = {\url{https://github.com/aryan-cs/steering-rebels}}
 }
 ```
 
